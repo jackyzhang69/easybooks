@@ -5,3 +5,4 @@
 //! is the only piece with non-trivial path logic and no network/IO side
 //! effects). Mirrors formbro-cli's `lib.rs` shape (which exposes `bootstrap`).
 pub mod bootstrap;
+pub mod envelope;

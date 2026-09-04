@@ -717,6 +717,19 @@ fn collect_public_command_paths(
 /// Build the authenticated client from config and dispatch every command that
 /// talks to the backend. Split out so `run` can short-circuit `login`/`doctor`.
 fn dispatch(command: Command, base_url_arg: Option<String>) -> Result<()> {
+    let original_args: Vec<String> = std::env::args().skip(1).collect();
+    if jz_plugin_common::auth::read_durable_token()
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        let operation = easybooks_cli::envelope::operation_from_args(&original_args);
+        let envelope =
+            easybooks_cli::envelope::connection_not_ready(&operation, original_args);
+        easybooks_cli::envelope::print_stdout(&envelope)?;
+        std::process::exit(0);
+    }
+
     let config = config::Config::load(base_url_arg)?;
     let client = client::ApiClient::from_config(&config)?;
 

@@ -44,7 +44,10 @@ when_to_use: |-
 Speak in everyday words. Say what you are doing and what happens next. Do not
 lead with binary paths, `--help`, or raw JSON. Keep CLI and JSON between
 tools. Never show credentials, bank data, or receipt contents in chat unless
-the user asked for that detail.
+the user asked for that detail. Run the intended ordinary command first; when
+stdout is `jz.plugin.envelope.v1`, follow its exact `status` and
+`continue_args` until the product reports `ready`, then resume the sealed
+request. Never assign doctor homework when an envelope already names the route.
 
 ## Live CLI surface (fail-closed)
 

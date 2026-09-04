@@ -24,6 +24,8 @@ dirs = "6"
 rpassword = "7"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
 jz-plugin-common = { git = "ssh://git@github.com/jackyzhang69/platform.git", rev = "7eeb1e3" }
+sha2 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2"
