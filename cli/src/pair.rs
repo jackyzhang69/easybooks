@@ -27,6 +27,8 @@ fn map_err(error: PairError) -> anyhow::Error {
         PairError::NotFound => anyhow!("no open connection with Jacky's assistant"),
         PairError::Expired => anyhow!("the connection with Jacky's assistant expired"),
         PairError::Conflict => anyhow!("the connection is not waiting or already in use"),
+        PairError::Closed => anyhow!("the connection with Jacky's assistant was closed"),
+        PairError::Timeout => anyhow!("the connection with Jacky's assistant timed out"),
         PairError::Rejected(message) => anyhow!("{message}"),
         PairError::Auth(other) => anyhow!("{other}"),
     }

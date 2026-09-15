@@ -11,9 +11,11 @@ use thiserror::Error;
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
     pub event_id: String,
+    #[serde(skip_serializing)]
     pub plugin_id: String,
     pub event_name: String,
     pub event_version: i32,
+    #[serde(skip_serializing)]
     pub platform_user_id: String,
     pub actor_class: String,
     pub source: String,
@@ -117,6 +119,20 @@ mod tests {
     }
 
     #[test]
+    fn ingest_json_omits_identity_fields() {
+        let event = Event::new(
+            "anychat",
+            "search_results_returned",
+            "550e8400-e29b-41d4-a716-446655440000",
+            "k1",
+        );
+        let value = serde_json::to_value(&event).unwrap();
+        assert!(value.get("plugin_id").is_none());
+        assert!(value.get("platform_user_id").is_none());
+        assert_eq!(value["event_name"], "search_results_returned");
+    }
+
+    #[test]
     fn batch_body_field_names() {
         test_env::with_home("jz_signals", |_tmp, mut server| {
             let issuer = server.url();
@@ -128,12 +144,8 @@ mod tests {
                 .create();
             let batch = server
                 .mock("POST", "/v1/products/anychat/events:batch")
-                .match_body(mockito::Matcher::Regex(r#""plugin_id":"anychat""#.into()))
                 .match_body(mockito::Matcher::Regex(
                     r#""event_name":"search_results_returned""#.into(),
-                ))
-                .match_body(mockito::Matcher::Regex(
-                    r#""platform_user_id":"550e8400-e29b-41d4-a716-446655440000""#.into(),
                 ))
                 .match_body(mockito::Matcher::Regex(r#""idempotency_key":"k1""#.into()))
                 .with_status(200)

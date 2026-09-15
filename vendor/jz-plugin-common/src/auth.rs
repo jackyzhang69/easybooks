@@ -21,6 +21,7 @@ const MAX_EXCHANGED_TOKEN_TTL: f64 = 300.0;
 // only to the upper sanity bound, never to expiry or the cache lifetime.
 const EXCHANGE_CLOCK_SKEW: f64 = 30.0;
 const EXCHANGE_REFRESH_SKEW: Duration = Duration::from_secs(30);
+const EXCHANGE_TIMEOUT: Duration = Duration::from_secs(30);
 const ALLOWED_JWT_ALGS: [&str; 2] = ["RS256", "ES256"];
 
 #[derive(Clone)]
@@ -109,6 +110,33 @@ pub fn exchange(identity: &PluginIdentity, accountd_base: &str) -> Result<Produc
     exchange_with_retry(identity, base, aud, &durable, false)
 }
 
+/// Validate an explicitly supplied login credential before committing it to the slot.
+/// Always contacts exchange; never falls back to the current slot on rejection.
+/// The caller owns saving the candidate only after its full login checks succeed.
+pub fn exchange_candidate(
+    identity: &PluginIdentity,
+    accountd_base: &str,
+    candidate: &str,
+) -> Result<ProductJwt, AuthError> {
+    if identity.auth_mode != AuthMode::Exchange {
+        return Err(AuthError::Malformed);
+    }
+    let aud = identity.aud.ok_or(AuthError::Malformed)?;
+    let candidate = candidate.trim();
+    if candidate.is_empty() {
+        return Err(AuthError::NotConnected);
+    }
+    match perform_exchange(
+        identity,
+        accountd_base.trim_end_matches('/'),
+        aud,
+        candidate,
+    ) {
+        Err(AuthError::Http(HttpError::Status { code: 401, .. })) => Err(AuthError::Unauthorized),
+        result => result,
+    }
+}
+
 /// POST JSON to a product route with one 401 re-exchange retry.
 pub fn post_product_json(
     identity: &PluginIdentity,
@@ -148,6 +176,19 @@ pub fn get_product_json(
     })
 }
 
+/// A bounded product POST for transport operations that retry on disconnect.
+pub fn post_product_with_timeout<T: Serialize, R: DeserializeOwned>(
+    identity: &PluginIdentity,
+    accountd_base: &str,
+    url: &str,
+    body: &T,
+    timeout: Duration,
+) -> Result<http::Response<R>, AuthError> {
+    product_request(identity, accountd_base, |token| {
+        http::send_json_with_timeout("POST", url, Some(token), Some(body), timeout)
+    })
+}
+
 /// GET JSON from a product route with a typed response body.
 pub fn get_product<R>(
     identity: &PluginIdentity,
@@ -159,6 +200,43 @@ where
 {
     product_request(identity, accountd_base, |token| {
         http::send_json::<R, Value>("GET", url, Some(token), None)
+    })
+}
+
+/// GET JSON from a product route with one 401 re-exchange retry and an
+/// operation-local read timeout. Pair long polls use this instead of changing
+/// the timeout for every product request in the shared client.
+pub fn get_product_with_timeout<R>(
+    identity: &PluginIdentity,
+    accountd_base: &str,
+    url: &str,
+    read_timeout: Duration,
+) -> Result<http::Response<R>, AuthError>
+where
+    R: DeserializeOwned,
+{
+    product_request(identity, accountd_base, |token| {
+        http::send_json_with_timeout::<R, Value>("GET", url, Some(token), None, read_timeout)
+    })
+}
+
+/// POST to a product route that must return an empty HTTP 204 response. A
+/// malformed successful response is surfaced as an error so callers cannot
+/// acknowledge a message without a real receipt.
+pub fn post_product_empty(
+    identity: &PluginIdentity,
+    accountd_base: &str,
+    url: &str,
+    body: &Value,
+) -> Result<http::Response<()>, AuthError> {
+    product_request(identity, accountd_base, |token| {
+        http::send_empty_value_with_timeout(
+            "POST",
+            url,
+            Some(token),
+            Some(body),
+            Duration::from_secs(30),
+        )
     })
 }
 
@@ -226,7 +304,13 @@ fn perform_exchange(
     let url = format!("{base}/v1/token/exchange");
     let scopes: Vec<&str> = identity.product_scopes.to_vec();
     let body = json!({ "aud": aud, "scopes": scopes });
-    let response = http::post_json_value(&url, Some(durable), &body)?;
+    let response = http::send_json_with_timeout::<Value, Value>(
+        "POST",
+        &url,
+        Some(durable),
+        Some(&body),
+        EXCHANGE_TIMEOUT,
+    )?;
     let token = response
         .body
         .get("access_token")

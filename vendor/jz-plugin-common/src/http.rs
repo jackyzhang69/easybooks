@@ -27,6 +27,18 @@ pub fn agent() -> Agent {
     AgentBuilder::new().redirects(0).build()
 }
 
+/// Build an agent for a bounded operation such as the pair mailbox long poll.
+/// The default agent keeps the historical timeout behavior for ordinary
+/// product calls; callers that need a deadline opt in here.
+pub fn agent_with_timeouts(read_timeout: std::time::Duration) -> Agent {
+    AgentBuilder::new()
+        .redirects(0)
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(read_timeout)
+        .timeout_write(std::time::Duration::from_secs(10))
+        .build()
+}
+
 pub fn send_json<T, B>(
     method: &str,
     url: &str,
@@ -37,7 +49,23 @@ where
     T: DeserializeOwned,
     B: Serialize,
 {
-    let mut request = agent().request(method, url);
+    send_json_with_agent(&agent(), method, url, bearer, body)
+}
+
+/// Send JSON using a caller-selected HTTP agent. This keeps bounded long-poll
+/// timeouts local to the operation that needs them.
+pub fn send_json_with_agent<T, B>(
+    client: &Agent,
+    method: &str,
+    url: &str,
+    bearer: Option<&str>,
+    body: Option<&B>,
+) -> Result<Response<T>, HttpError>
+where
+    T: DeserializeOwned,
+    B: Serialize,
+{
+    let mut request = client.request(method, url);
     request = request
         .set("Accept", "application/json")
         .set("Accept-Encoding", "identity");
@@ -52,7 +80,9 @@ where
     }
     .map_err(map_ureq_error)?;
     let status = response.status();
-    let text = response.into_string().unwrap_or_default();
+    let text = response
+        .into_string()
+        .map_err(|error| HttpError::Transport(format!("response body read failed: {error}")))?;
     if !(200..300).contains(&status) {
         return Err(HttpError::Status {
             code: status,
@@ -71,6 +101,27 @@ where
     })
 }
 
+/// Send JSON with a bounded read timeout. Used by the pair wait loop only.
+pub fn send_json_with_timeout<T, B>(
+    method: &str,
+    url: &str,
+    bearer: Option<&str>,
+    body: Option<&B>,
+    read_timeout: std::time::Duration,
+) -> Result<Response<T>, HttpError>
+where
+    T: DeserializeOwned,
+    B: Serialize,
+{
+    send_json_with_agent(
+        &agent_with_timeouts(read_timeout),
+        method,
+        url,
+        bearer,
+        body,
+    )
+}
+
 pub fn send_json_value(
     method: &str,
     url: &str,
@@ -86,6 +137,84 @@ pub fn post_json_value(
     body: &serde_json::Value,
 ) -> Result<Response<serde_json::Value>, HttpError> {
     send_json_value("POST", url, bearer, Some(body))
+}
+
+/// Send a request that must return HTTP 204 with an empty body. A malformed or
+/// unexpected successful response is an error; it is never treated as an ack.
+pub fn send_empty_value(
+    method: &str,
+    url: &str,
+    bearer: Option<&str>,
+    body: Option<&serde_json::Value>,
+) -> Result<Response<()>, HttpError> {
+    send_empty_value_with_agent(&agent(), method, url, bearer, body)
+}
+
+/// Send an empty-response request with an operation-local timeout. A pair
+/// acknowledgement is a bounded network operation just like a long poll.
+pub fn send_empty_value_with_timeout(
+    method: &str,
+    url: &str,
+    bearer: Option<&str>,
+    body: Option<&serde_json::Value>,
+    read_timeout: std::time::Duration,
+) -> Result<Response<()>, HttpError> {
+    send_empty_value_with_agent(
+        &agent_with_timeouts(read_timeout),
+        method,
+        url,
+        bearer,
+        body,
+    )
+}
+
+fn send_empty_value_with_agent(
+    client: &Agent,
+    method: &str,
+    url: &str,
+    bearer: Option<&str>,
+    body: Option<&serde_json::Value>,
+) -> Result<Response<()>, HttpError> {
+    let mut request = client.request(method, url);
+    request = request
+        .set("Accept", "application/json")
+        .set("Accept-Encoding", "identity");
+    if let Some(token) = bearer {
+        request = request.set("Authorization", &format!("Bearer {token}"));
+    }
+    let response = match body {
+        Some(value) => request
+            .set("Content-Type", "application/json")
+            .send_json(value),
+        None => request.call(),
+    }
+    .map_err(map_ureq_error)?;
+    let status = response.status();
+    if status == 204
+        && (response.header("Transfer-Encoding").is_some()
+            || response
+                .header("Content-Length")
+                .is_some_and(|length| length.parse::<u64>() != Ok(0)))
+    {
+        return Err(HttpError::Decode(
+            "acknowledgement has unexpected body framing".into(),
+        ));
+    }
+    let text = response
+        .into_string()
+        .map_err(|error| HttpError::Transport(format!("response body read failed: {error}")))?;
+    if status != 204 {
+        return Err(HttpError::Status {
+            code: status,
+            body_excerpt: redact_body_excerpt(&text),
+        });
+    }
+    if !text.is_empty() {
+        return Err(HttpError::Decode(
+            "expected an empty HTTP 204 response".into(),
+        ));
+    }
+    Ok(Response { status, body: () })
 }
 
 fn map_ureq_error(error: ureq::Error) -> HttpError {
@@ -267,5 +396,41 @@ mod tests {
     #[test]
     fn and_or_is_not_treated_as_path() {
         assert!(!looks_like_absolute_path("Choose Continue and/or Cancel."));
+    }
+
+    #[test]
+    fn empty_ack_requires_exact_204_without_a_body() {
+        let mut server = mockito::Server::new();
+        let ok = server.mock("POST", "/read").with_status(204).create();
+        let url = format!("{}/read", server.url());
+        let response = send_empty_value("POST", &url, None, Some(&serde_json::json!({})))
+            .expect("204 acknowledgement");
+        assert_eq!(response.status, 204);
+        ok.assert();
+
+        let bad = server
+            .mock("POST", "/read-body")
+            .with_status(200)
+            .with_body("unexpected")
+            .create();
+        let url = format!("{}/read-body", server.url());
+        assert!(matches!(
+            send_empty_value("POST", &url, None, Some(&serde_json::json!({}))),
+            Err(HttpError::Status { code: 200, .. })
+        ));
+        bad.assert();
+
+        let bad_body = server
+            .mock("POST", "/read-204-body")
+            .with_status(204)
+            .with_header("content-length", "10")
+            .with_body("unexpected")
+            .create();
+        let url = format!("{}/read-204-body", server.url());
+        assert!(matches!(
+            send_empty_value("POST", &url, None, Some(&serde_json::json!({}))),
+            Err(HttpError::Decode(_))
+        ));
+        bad_body.assert();
     }
 }

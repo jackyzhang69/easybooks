@@ -479,19 +479,63 @@ fn scan_continue_args(envelope: &Envelope, violations: &mut Vec<Violation>) {
 
 fn looks_like_command(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
-    for needle in [
-        "npm install",
-        "npm run",
-        "cargo ",
-        "formbro login",
-        "curl ",
-        "bash ",
-        "sh ",
-        "sudo ",
-    ] {
-        if lower.contains(needle) {
+    for phrase in ["npm install", "npm run", "formbro login"] {
+        if contains_command_phrase(&lower, phrase) {
             return true;
         }
+    }
+    for token in ["cargo", "curl", "bash", "sh", "sudo"] {
+        if contains_command_token(&lower, token) {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_command_prefix_sep(ch: char) -> bool {
+    ch.is_ascii_whitespace() || matches!(ch, ';' | '|' | '&' | '(' | '`')
+}
+
+fn is_command_suffix_sep(ch: char) -> bool {
+    ch.is_ascii_whitespace() || matches!(ch, '-' | ';' | '|' | '&' | ')' | '`')
+}
+
+fn contains_command_token(haystack: &str, token: &str) -> bool {
+    let mut from = 0;
+    while let Some(rel) = haystack[from..].find(token) {
+        let start = from + rel;
+        let end = start + token.len();
+        let before_ok = start == 0
+            || haystack[..start]
+                .chars()
+                .next_back()
+                .is_some_and(is_command_prefix_sep);
+        let after_ok = end == haystack.len()
+            || haystack[end..]
+                .chars()
+                .next()
+                .is_some_and(is_command_suffix_sep);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
+}
+
+fn contains_command_phrase(haystack: &str, phrase: &str) -> bool {
+    let mut from = 0;
+    while let Some(rel) = haystack[from..].find(phrase) {
+        let start = from + rel;
+        let before_ok = start == 0
+            || haystack[..start]
+                .chars()
+                .next_back()
+                .is_some_and(is_command_prefix_sep);
+        if before_ok {
+            return true;
+        }
+        from = start + 1;
     }
     false
 }
@@ -599,5 +643,38 @@ mod tests {
             "extra": {}
         }"#;
         assert!(serde_json::from_str::<Envelope>(raw).is_err());
+    }
+
+    #[test]
+    fn ordinary_english_is_not_a_shell_command() {
+        for text in [
+            "Automatic setup could not finish on this computer.",
+            "Please refresh the status.",
+            "The English version is available.",
+            "Automatic setup could not complete on this computer.",
+        ] {
+            assert!(
+                !looks_like_command(text),
+                "ordinary prose must not be classified as a command: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn real_command_text_is_still_rejected() {
+        for text in [
+            "Run sh setup.sh",
+            "bash scripts/foo",
+            "curl https://example.com",
+            "sudo reboot",
+            "cargo test",
+            "Run npm install -g formbro-cli and then formbro login.",
+            "npm run build",
+        ] {
+            assert!(
+                looks_like_command(text),
+                "command text must still be rejected: {text}"
+            );
+        }
     }
 }

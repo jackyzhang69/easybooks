@@ -1,3 +1,8 @@
+## 0.5.23
+
+- Pin jz-plugin-common with rustls TLS backend for macOS HTTPS support.
+- Handle PairError::Closed and PairError::Timeout in pair commands.
+
 ## 0.5.22
 
 - Transaction deletion support (`easybooks tx delete <id> [--force]`)
