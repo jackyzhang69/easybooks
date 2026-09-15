@@ -184,6 +184,7 @@ Recorded rows are upserted on **`(user_id, source_system, source_id)`**. That me
 | "record this receipt / supplier invoice / screenshot / PDF" | parse locally → Entry JSON → `tx import-json --json '<json>' --dry-run` → confirm → rerun without `--dry-run` |
 | "import this spreadsheet / CSV / bank statement of expenses" | parse rows locally → batch Entry JSON → `tx import-json --dry-run` → confirm → rerun |
 | "this should be personal / mixed, not business" / "fix the classification" | `"$EASYBOOKS_BIN" tx reclassify <id> --class business\|mixed\|personal [--learn]` |
+| "delete a transaction" | `"$EASYBOOKS_BIN" tx delete <id> [--force]` |
 | "attach the receipt / PDF to this transaction" | `"$EASYBOOKS_BIN" tx attach-receipt <id> --file <path>` |
 | "what categories do I have" | `"$EASYBOOKS_BIN" categories list [--type income\|expense]` |
 | "scan my Gmail for receipts" | hand off to [gmail](gmail.md) (uses `gmail record`, source_id = message id) |

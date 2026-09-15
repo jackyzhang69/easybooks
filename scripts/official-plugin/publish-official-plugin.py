@@ -101,6 +101,28 @@ def catalog_version(marketplace: Path, catalog: str) -> str | None:
     return None
 
 
+def update_marketplace_readme(marketplace: Path, catalog: str, version: str) -> None:
+    readme_path = marketplace / "README.md"
+    if not readme_path.is_file():
+        return
+    text = readme_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    updated = False
+    new_lines: list[str] = []
+    pattern = re.compile(
+        rf"^(\|\s*\[?`?{re.escape(catalog)}`?\]?.*?\|\s*)([0-9A-Za-z_.-]+)(\s*\|.*)$"
+    )
+    for line in lines:
+        match = pattern.match(line)
+        if match and not updated:
+            new_lines.append(f"{match.group(1)}{version}{match.group(3)}")
+            updated = True
+        else:
+            new_lines.append(line)
+    if updated:
+        readme_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+
 def set_catalog_version(marketplace: Path, catalog: str, version: str) -> None:
     leftover = leftover_cli_catalog(catalog)
     source = f"./plugins/{catalog}"
@@ -387,6 +409,8 @@ def marketplace_git_paths(marketplace: Path, catalog: str) -> list[str]:
         ".claude-plugin/marketplace.json",
         ".agents/plugins/marketplace.json",
     ]
+    if (marketplace / "README.md").is_file():
+        paths.append("README.md")
     leftover_rel = f"plugins/{leftover_cli_catalog(catalog)}"
     if (marketplace / leftover_rel).exists() or _git_tracks(marketplace, leftover_rel):
         paths.append(leftover_rel)
@@ -482,6 +506,7 @@ def publish(
         shutil.rmtree(dest)
     shutil.copytree(staged, dest, symlinks=True)
     set_catalog_version(marketplace, catalog, version)
+    update_marketplace_readme(marketplace, catalog, version)
     if leftover_dir.exists() and leftover_dir.resolve() != dest.resolve():
         shutil.rmtree(leftover_dir)
     after = _tree_digest(dest)

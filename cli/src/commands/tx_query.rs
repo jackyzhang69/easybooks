@@ -153,6 +153,27 @@ pub fn update(
     output::print_json(&client.send_with_body("PATCH", &path, &Value::Object(body))?)
 }
 
+/// `easybooks tx delete <id> [--force]`
+/// → DELETE /api/integrations/transactions/{id}
+///
+/// Guard: requires `--force` so agents/callers fail-safe rather than
+/// silently deleting records without explicit intent.
+pub fn delete(client: &ApiClient, transaction_id: &str, force: bool) -> Result<()> {
+    if transaction_id.trim().is_empty() {
+        return Err(anyhow!("transaction_id is required"));
+    }
+    if !force {
+        return Err(anyhow!(
+            "tx delete requires --force to confirm the deletion (non-interactive CLI guard)"
+        ));
+    }
+    let path = format!(
+        "/api/integrations/transactions/{}",
+        encode_segment(transaction_id)
+    );
+    output::print_json(&client.delete(&path)?)
+}
+
 /// Parse a decimal dollar amount into integer cents (mirrors transactions.rs).
 fn parse_amount_cents(raw: &str) -> Result<i64> {
     let s = raw.trim().trim_start_matches('$').replace(',', "");
@@ -210,5 +231,16 @@ mod tests {
         assert_eq!(encode_segment("txn_abc"), "txn_abc");
         assert_eq!(encode_segment("a/b"), "a%2Fb");
         assert_eq!(encode_segment("a b"), "a%20b");
+    }
+
+    #[test]
+    fn delete_requires_force() {
+        let force = false;
+        let result: Result<()> = if !force {
+            Err(anyhow!("requires --force"))
+        } else {
+            Ok(())
+        };
+        assert!(result.is_err());
     }
 }

@@ -585,6 +585,13 @@ enum TxSub {
         #[arg(long = "dry-run", default_value_t = false)]
         dry_run: bool,
     },
+    /// DELETE /api/integrations/transactions/{id} — delete a transaction.
+    Delete {
+        transaction_id: String,
+        /// Required guard: confirm the deletion (non-interactive CLI).
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
 }
 
 #[derive(Args)]
@@ -908,6 +915,10 @@ fn dispatch(command: Command, base_url_arg: Option<String>) -> Result<()> {
                 notes.as_deref(),
                 dry_run,
             ),
+            TxSub::Delete {
+                transaction_id,
+                force,
+            } => tx_query::delete(&client, &transaction_id, force),
         },
         Command::Invoice(cmd) => match cmd.command {
             InvoiceSub::Create { json, dry_run } => invoices::create(&client, &json, dry_run),
@@ -1289,6 +1300,25 @@ mod tests {
                     assert_eq!(category.as_deref(), Some("Office Supplies"));
                 }
                 _ => panic!("expected tx update"),
+            },
+            _ => panic!("expected tx command"),
+        }
+    }
+
+    #[test]
+    fn parses_tx_delete_force() {
+        let cli = Cli::try_parse_from(["easybooks", "tx", "delete", "txn_123", "--force"])
+            .expect("tx delete --force should parse");
+        match cli.command {
+            super::Command::Tx(cmd) => match cmd.command {
+                super::TxSub::Delete {
+                    transaction_id,
+                    force,
+                } => {
+                    assert_eq!(transaction_id, "txn_123");
+                    assert!(force);
+                }
+                _ => panic!("expected tx delete"),
             },
             _ => panic!("expected tx command"),
         }

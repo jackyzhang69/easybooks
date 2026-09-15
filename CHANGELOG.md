@@ -1,3 +1,8 @@
+## 0.5.22
+
+- Transaction deletion support (`easybooks tx delete <id> [--force]`)
+  via `DELETE /api/integrations/transactions/{id}`.
+
 ## 0.5.21
 
 - Pair session with Jacky's assistant (`easybooks pair …`). Public
