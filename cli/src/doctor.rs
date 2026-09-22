@@ -162,7 +162,7 @@ fn backend_probe(cfg: Option<&Config>) -> serde_json::Value {
 
 fn check_marketplace_upgrade(self_version: &str) -> serde_json::Value {
     const TAGS_URL: &str =
-        "https://api.github.com/repos/jackyzhang69/easybooks-plugin/tags?per_page=100";
+        "https://api.github.com/repos/jackyzhang69/easybooks/tags?per_page=100";
     let client = match reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
         .user_agent(concat!("easybooks-cli/", env!("CARGO_PKG_VERSION")))

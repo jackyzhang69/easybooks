@@ -6,7 +6,7 @@ repo; exit 2 otherwise.
 
 Usage:
   python3 preflight-official-plugin-release.py --plugin-id easybooks
-  python3 preflight-official-plugin-release.py --repo jackyzhang69/easybooks-plugin \\
+  python3 preflight-official-plugin-release.py --repo jackyzhang69/easybooks \\
       --secret PLUGINS_REPO_DEPLOY_KEY --secret APPLE_ID
 """
 
@@ -20,7 +20,7 @@ import sys
 
 REQUIRED: dict[str, tuple[str, tuple[str, ...]]] = {
     "easybooks": (
-        "jackyzhang69/easybooks-plugin",
+        "jackyzhang69/easybooks",
         (
             "PLUGINS_REPO_DEPLOY_KEY",
             "APPLE_ID",

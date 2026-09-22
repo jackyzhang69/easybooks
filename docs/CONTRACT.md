@@ -28,7 +28,7 @@ endpoint pattern we are extending: `POST /api/integrations/audit/stripe-payouts`
 - Binary override env: `$EASYBOOKS_BIN`
 - Version: `0.1.0` (workspace-inherited)
 - Marketplace repo (published plugin): `jackyzhang69/plugins` (same marketplace as formbro)
-- Source/container repo: `https://github.com/jackyzhang69/easybooks-plugin`
+- Source/container repo: `https://github.com/jackyzhang69/easybooks`
 
 ### Binary resolver (used by every skill; mirror formbro-capabilities §B)
 Resolution order — first existing executable wins:

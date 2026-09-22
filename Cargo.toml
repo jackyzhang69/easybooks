@@ -9,7 +9,7 @@ edition = "2021"
 license = "MIT"
 version = "0.5.23"
 authors = ["Jacky Zhang <jackyzhang1969@gmail.com>"]
-repository = "https://github.com/jackyzhang69/easybooks-plugin"
+repository = "https://github.com/jackyzhang69/easybooks"
 
 [workspace.dependencies]
 anyhow = "1"
