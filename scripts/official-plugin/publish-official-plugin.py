@@ -101,26 +101,54 @@ def catalog_version(marketplace: Path, catalog: str) -> str | None:
     return None
 
 
-def update_marketplace_readme(marketplace: Path, catalog: str, version: str) -> None:
-    readme_path = marketplace / "README.md"
-    if not readme_path.is_file():
-        return
-    text = readme_path.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    updated = False
-    new_lines: list[str] = []
-    pattern = re.compile(
-        rf"^(\|\s*\[?`?{re.escape(catalog)}`?\]?.*?\|\s*)([0-9A-Za-z_.-]+)(\s*\|.*)$"
+
+def resolve_render_public_plugin_docs() -> Path:
+    env = os.environ.get("RENDER_PUBLIC_PLUGIN_DOCS")
+    if env:
+        path = Path(env)
+        if path.is_file():
+            return path
+        raise PublishError(f"RENDER_PUBLIC_PLUGIN_DOCS is not a file: {env}")
+    candidates = [
+        Path("/Users/jacky/platform/governance/scripts/official-plugin/render_public_plugin_docs.py"),
+        Path.home()
+        / ".local/share/platform-governance/governance/scripts/official-plugin/render_public_plugin_docs.py",
+        Path("/agent/repos/platform/governance/scripts/official-plugin/render_public_plugin_docs.py"),
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    raise PublishError(
+        "render_public_plugin_docs.py not found (set RENDER_PUBLIC_PLUGIN_DOCS or install platform governance)"
     )
-    for line in lines:
-        match = pattern.match(line)
-        if match and not updated:
-            new_lines.append(f"{match.group(1)}{version}{match.group(3)}")
-            updated = True
-        else:
-            new_lines.append(line)
-    if updated:
-        readme_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+
+def run_render_public_plugin_docs(args: list[str]) -> None:
+    script = resolve_render_public_plugin_docs()
+    proc = subprocess.run(
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise PublishError(f"render_public_plugin_docs failed: {detail}")
+
+
+def rewrite_marketplace_readme(marketplace: Path) -> None:
+    run_render_public_plugin_docs(
+        ["marketplace", "--marketplace", str(marketplace), "--write"]
+    )
+
+
+def rewrite_package_readme(staged: Path) -> None:
+    run_render_public_plugin_docs(["package", "--staged", str(staged), "--write"])
+
+
+def update_marketplace_readme(marketplace: Path, catalog: str, version: str) -> None:
+    """Full-table regen; catalog/version already live in marketplace.json."""
+    del catalog, version
+    rewrite_marketplace_readme(marketplace)
 
 
 def set_catalog_version(marketplace: Path, catalog: str, version: str) -> None:
@@ -506,7 +534,8 @@ def publish(
         shutil.rmtree(dest)
     shutil.copytree(staged, dest, symlinks=True)
     set_catalog_version(marketplace, catalog, version)
-    update_marketplace_readme(marketplace, catalog, version)
+    rewrite_package_readme(dest)
+    rewrite_marketplace_readme(marketplace)
     if leftover_dir.exists() and leftover_dir.resolve() != dest.resolve():
         shutil.rmtree(leftover_dir)
     after = _tree_digest(dest)
