@@ -1,4 +1,4 @@
-# easybooks-plugin
+# easybooks
 
 Record your bookkeeping straight from a conversation. Drop a receipt, paste an
 invoice, or point at your inbox — the agent reads it, and **EasyBooks** files it
