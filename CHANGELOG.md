@@ -1,3 +1,10 @@
+## 0.5.24
+
+- Official plugin publish now writes AnyChat-style `.sha256` sidecars and
+  `runtime-manifest.json` platform `sha256` fields after signing, so
+  marketplace `verifyChecksum` can pass. Patch bump so admin can tag
+  `plugin-v0.5.24` and republish; this change is packaging-only.
+
 ## 0.5.23
 
 - Pin jz-plugin-common with rustls TLS backend for macOS HTTPS support.

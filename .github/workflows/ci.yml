@@ -47,7 +47,10 @@ jobs:
 
       - name: Version metadata lock-step
         run: |
-          python3 -m py_compile scripts/assert_plugin_version.py plugin-metadata/scripts/verify-install
+          python3 -m py_compile scripts/assert_plugin_version.py plugin-metadata/scripts/verify-install \
+            scripts/official-plugin/finalize-signed-hashes.py \
+            scripts/official-plugin/test_finalize_signed_hashes.py
+          python3 scripts/official-plugin/test_finalize_signed_hashes.py
           python3 scripts/assert_plugin_version.py --root .
           python3 - <<'PY'
           from pathlib import Path

@@ -185,6 +185,12 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/assemble-official-plugin.sh "$STAGE" "$RUNNER_TEMP/easybooks-cli"
+          # assemble already finalizes; run again + --check so the AnyChat
+          # post-sign sequence is explicit and fail-closed before marketplace write.
+          python3 scripts/official-plugin/finalize-signed-hashes.py \
+            --staged "$RUNNER_TEMP/easybooks-cli"
+          python3 scripts/official-plugin/finalize-signed-hashes.py \
+            --staged "$RUNNER_TEMP/easybooks-cli" --check
           git clone --branch main "git@github.com:jackyzhang69/plugins.git" "$RUNNER_TEMP/plugins-repo"
           python3 scripts/official-plugin/publish-official-plugin.py \
             --plugin-id easybooks \

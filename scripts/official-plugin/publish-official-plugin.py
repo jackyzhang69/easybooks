@@ -317,6 +317,24 @@ def probe_backend(plugin_id: str, aud: str | None) -> None:
         )
 
 
+def run_finalize_signed_hashes_check(staged: Path) -> None:
+    script = HERE / "finalize-signed-hashes.py"
+    if not script.is_file():
+        raise PublishError(f"missing {script}")
+    proc = subprocess.run(
+        [sys.executable, str(script), "--staged", str(staged), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    sys.stderr.write(proc.stdout)
+    sys.stderr.write(proc.stderr)
+    if proc.returncode != 0:
+        raise PublishError(
+            "finalize-signed-hashes.py --check failed "
+            "(need .sha256 sidecars and runtime-manifest platform sha256 after signing)"
+        )
+
+
 def run_verify_package(staged: Path) -> None:
     script = HERE / "verify-plugin-package.sh"
     if not script.is_file():
@@ -510,6 +528,7 @@ def publish(
                 f"CLI has no --version and commands --json version {json_ver} disagrees with plugin.json {version}"
             )
     require_runtime_matches_package(staged, version)
+    run_finalize_signed_hashes_check(staged)
     run_verify_package(staged)
     run_skill_surface(staged, plugin_id, bin_path)
     probe_backend(plugin_id, aud)

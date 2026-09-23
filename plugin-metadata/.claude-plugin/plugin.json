@@ -1,7 +1,7 @@
 {
   "name": "easybooks",
   "description": "Bookkeeping for self-employed Canadians via the bundled EasyBooks CLI: drop a receipt, invoice, or scan Gmail and have it recorded into EasyBooks. The CLI is the only boundary for all EasyBooks reads and writes — record income/expenses, create and send invoices, and resolve clients/categories.",
-  "version": "0.5.23",
+  "version": "0.5.24",
   "author": {
     "name": "Jacky Zhang"
   },

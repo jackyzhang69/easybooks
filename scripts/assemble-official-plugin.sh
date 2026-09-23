@@ -27,4 +27,7 @@ rm = json.loads((root / "runtime-manifest.json").read_text())
 rm["source_sha"] = sha
 (root / "runtime-manifest.json").write_text(json.dumps(rm, indent=2) + "\n")
 PY
+# Post-sign finalize: hash the bins actually copied into the package (codesign
+# changes Mach-O bytes). Writes *.sha256 sidecars + runtime-manifest sha256.
+python3 "$ROOT/scripts/official-plugin/finalize-signed-hashes.py" --staged "$OUT"
 echo "assembled $OUT"
