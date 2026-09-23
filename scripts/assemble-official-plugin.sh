@@ -19,15 +19,44 @@ done
 cp "$STAGE/cli-aarch64-apple-darwin/easybooks" "$OUT/bin/darwin-arm64/easybooks"
 cp "$STAGE/cli-x86_64-pc-windows-gnu/easybooks.exe" "$OUT/bin/win32-x64/easybooks.exe"
 chmod +x "$OUT/bin/darwin-arm64/easybooks"
+# Post-sign "Seal immutable signed stage" already wrote these next to the
+# STAGE bins. The marketplace drop was copying only the two binaries. Pre-sign
+# preflight assemble has no sidecars yet — copy only when the pair is present.
+MAC_SUM="$STAGE/cli-aarch64-apple-darwin/easybooks.sha256"
+WIN_SUM="$STAGE/cli-x86_64-pc-windows-gnu/easybooks.exe.sha256"
+if [ -f "$MAC_SUM" ] || [ -f "$WIN_SUM" ]; then
+  test -f "$MAC_SUM" || { echo "assemble-official-plugin: missing $MAC_SUM" >&2; exit 1; }
+  test -f "$WIN_SUM" || { echo "assemble-official-plugin: missing $WIN_SUM" >&2; exit 1; }
+  cp "$MAC_SUM" "$OUT/bin/darwin-arm64/easybooks.sha256"
+  cp "$WIN_SUM" "$OUT/bin/win32-x64/easybooks.exe.sha256"
+fi
 python3 - "$OUT" "$(git -C "$ROOT" rev-parse HEAD)" <<'PY'
-import json, pathlib, sys
+import hashlib, json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 sha = sys.argv[2]
 rm = json.loads((root / "runtime-manifest.json").read_text())
 rm["source_sha"] = sha
+binary = rm.get("binary") if isinstance(rm.get("binary"), dict) else {}
+platforms = binary.get("platforms") if isinstance(binary.get("platforms"), dict) else {}
+for plat, entry in platforms.items():
+    if not isinstance(entry, dict):
+        continue
+    rel = entry.get("entrypoint")
+    if not rel:
+        raise SystemExit(f"assemble-official-plugin: {plat} missing entrypoint")
+    artifact = root / rel
+    sidecar = artifact.with_name(artifact.name + ".sha256")
+    if not sidecar.is_file():
+        continue
+    if not artifact.is_file():
+        raise SystemExit(f"assemble-official-plugin: missing {rel}")
+    digest = sidecar.read_text(encoding="utf-8").strip().split()[0]
+    actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if digest != actual:
+        raise SystemExit(
+            f"assemble-official-plugin: {sidecar.name}={digest} does not match {rel}={actual}"
+        )
+    entry["sha256"] = digest
 (root / "runtime-manifest.json").write_text(json.dumps(rm, indent=2) + "\n")
 PY
-# Post-sign finalize: hash the bins actually copied into the package (codesign
-# changes Mach-O bytes). Writes *.sha256 sidecars + runtime-manifest sha256.
-python3 "$ROOT/scripts/official-plugin/finalize-signed-hashes.py" --staged "$OUT"
 echo "assembled $OUT"

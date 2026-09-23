@@ -317,22 +317,40 @@ def probe_backend(plugin_id: str, aud: str | None) -> None:
         )
 
 
-def run_finalize_signed_hashes_check(staged: Path) -> None:
-    script = HERE / "finalize-signed-hashes.py"
-    if not script.is_file():
-        raise PublishError(f"missing {script}")
-    proc = subprocess.run(
-        [sys.executable, str(script), "--staged", str(staged), "--check"],
-        capture_output=True,
-        text=True,
-    )
-    sys.stderr.write(proc.stdout)
-    sys.stderr.write(proc.stderr)
-    if proc.returncode != 0:
-        raise PublishError(
-            "finalize-signed-hashes.py --check failed "
-            "(need .sha256 sidecars and runtime-manifest platform sha256 after signing)"
-        )
+def require_integrity_checksums(staged: Path) -> None:
+    """Fail closed when verifyChecksum is on but assemble dropped sidecars/hashes."""
+    path = staged / "runtime-manifest.json"
+    if not path.is_file():
+        raise PublishError("staged package missing runtime-manifest.json")
+    runtime = _json_load(path)
+    binary = runtime.get("binary") if isinstance(runtime.get("binary"), dict) else {}
+    if binary.get("verifyChecksum") is not True:
+        return
+    platforms = binary.get("platforms") if isinstance(binary.get("platforms"), dict) else {}
+    if not platforms:
+        raise PublishError("runtime-manifest binary.platforms is empty")
+    for plat, entry in platforms.items():
+        if not isinstance(entry, dict):
+            raise PublishError(f"binary.{plat}: platform entry is not an object")
+        rel = str(entry.get("entrypoint") or "")
+        digest = entry.get("sha256")
+        if not rel or not isinstance(digest, str) or not digest:
+            raise PublishError(
+                f"binary.{plat}: missing entrypoint or sha256 "
+                "(assemble must copy sealed *.sha256 sidecars after sign)"
+            )
+        artifact = staged / rel
+        if artifact.is_symlink() or not artifact.is_file():
+            raise PublishError(f"binary.{plat}: staged artifact missing or unsafe: {rel}")
+        actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        if actual != digest:
+            raise PublishError(f"binary.{plat}: sha256 drift for {rel}")
+        sidecar = artifact.with_name(artifact.name + ".sha256")
+        if sidecar.is_symlink() or not sidecar.is_file():
+            raise PublishError(f"binary.{plat}: missing checksum sidecar {sidecar.name}")
+        side = sidecar.read_text(encoding="utf-8").strip().split()[0]
+        if side != digest:
+            raise PublishError(f"binary.{plat}: sidecar {sidecar.name} != manifest sha256")
 
 
 def run_verify_package(staged: Path) -> None:
@@ -528,7 +546,7 @@ def publish(
                 f"CLI has no --version and commands --json version {json_ver} disagrees with plugin.json {version}"
             )
     require_runtime_matches_package(staged, version)
-    run_finalize_signed_hashes_check(staged)
+    require_integrity_checksums(staged)
     run_verify_package(staged)
     run_skill_surface(staged, plugin_id, bin_path)
     probe_backend(plugin_id, aud)

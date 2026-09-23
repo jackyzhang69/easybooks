@@ -1,7 +1,7 @@
 ## 0.5.24
 
-- Official plugin publish now writes AnyChat-style `.sha256` sidecars and
-  `runtime-manifest.json` platform `sha256` fields after signing, so
+- Official assemble no longer drops the sealed STAGE `*.sha256` sidecars, and
+  stamps `runtime-manifest.json` platform `sha256` from those files so
   marketplace `verifyChecksum` can pass. Patch bump so admin can tag
   `plugin-v0.5.24` and republish; this change is packaging-only.
 
