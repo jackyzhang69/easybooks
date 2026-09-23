@@ -5,6 +5,8 @@
 # delivery/plugin-common-module.md §5 that a machine can check:
 #   - Package shape conformance (manifest envelope, source_sha, bin naming)
 #   - Any-product host OS floor (exactly darwin-arm64 + win32-x64)
+#   - When bins are present and verifyChecksum is true: *.sha256 sidecars
+#     plus runtime-manifest platform sha256 must match the binaries
 #   - Version agreement across every metadata surface
 #   - Unified runtime storage (configHome under ~/.jackyzhang.app/<plugin_id>/)
 #   - Physical single SKILL.md (exactly one skills/*/SKILL.md; none under references/)
@@ -262,6 +264,60 @@ PY
   [ $have_win -eq 1 ] || fail "no bin/win32-x64/ (macOS+Windows is a release floor, not a roadmap item)"
   [ -n "$extra" ] && fail "unexpected binary dirs:$extra (public packages ship exactly two)"
   [ $have_mac -eq 1 ] && [ $have_win -eq 1 ] && [ -z "$extra" ] && pass "exactly darwin-arm64 + win32-x64"
+
+  # --- checksum sidecars when verifyChecksum is on and bins are present --------
+  CUR="checksum-sidecars"
+  if [ $have_mac -eq 1 ] || [ $have_win -eq 1 ]; then
+    local checksum_msg
+    if checksum_msg="$(python3 - "$rm" "$dir" <<'PY'
+import hashlib, json, pathlib, sys
+manifest_path, root = sys.argv[1], pathlib.Path(sys.argv[2])
+runtime = json.loads(pathlib.Path(manifest_path).read_text(encoding="utf-8"))
+binary = runtime.get("binary") or {}
+if binary.get("verifyChecksum") is not True:
+    raise SystemExit(0)
+errors = []
+for plat, entry in (binary.get("platforms") or {}).items():
+    if not isinstance(entry, dict):
+        errors.append(f"binary.{plat}: platform entry is not an object")
+        continue
+    rel = entry.get("entrypoint")
+    digest = entry.get("sha256")
+    if not rel or not digest:
+        errors.append(f"binary.{plat}: missing entrypoint or sha256")
+        continue
+    artifact = root / rel
+    if artifact.is_symlink() or not artifact.is_file():
+        errors.append(f"binary.{plat}: missing artifact {rel}")
+        continue
+    actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if actual != digest:
+        errors.append(f"binary.{plat}: sha256 drift manifest={digest} actual={actual}")
+    sidecar = artifact.with_name(artifact.name + ".sha256")
+    if sidecar.is_symlink() or not sidecar.is_file():
+        errors.append(f"binary.{plat}: missing sidecar {sidecar.name}")
+    else:
+        side = sidecar.read_text(encoding="utf-8").strip().split()[0]
+        if side != digest:
+            errors.append(f"binary.{plat}: sidecar {side} != manifest {digest}")
+if errors:
+    print("\n".join(errors))
+    raise SystemExit(1)
+PY
+)"; then
+      pass "sidecars and runtime-manifest sha256 agree"
+    else
+      if [ -n "$checksum_msg" ]; then
+        while IFS= read -r line; do
+          [ -n "$line" ] && fail "$line"
+        done <<< "$checksum_msg"
+      else
+        fail "checksum sidecars do not match runtime-manifest sha256"
+      fi
+    fi
+  else
+    pass "no bins to checksum (metadata-only tree)"
+  fi
 
   # --- unified runtime storage ------------------------------------------------
   CUR="runtime-storage"

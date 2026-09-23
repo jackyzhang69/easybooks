@@ -1,3 +1,10 @@
+## 0.5.24
+
+- Official assemble no longer drops the sealed STAGE `*.sha256` sidecars, and
+  stamps `runtime-manifest.json` platform `sha256` from those files so
+  marketplace `verifyChecksum` can pass. Patch bump so admin can tag
+  `plugin-v0.5.24` and republish; this change is packaging-only.
+
 ## 0.5.23
 
 - Pin jz-plugin-common with rustls TLS backend for macOS HTTPS support.

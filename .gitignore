@@ -7,6 +7,8 @@ dist/
 .vscode/
 .idea/
 *.swp
+__pycache__/
+*.pyc
 
 # Built CLI binaries are produced by CI and staged into bin/<platform>/ at
 # release time; do not commit local dev builds.

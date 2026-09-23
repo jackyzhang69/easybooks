@@ -8,4 +8,6 @@ if [ ! -d "$ROOT/bin" ]; then
 fi
 test -f "$ROOT/bin/darwin-arm64/easybooks" || { echo "missing darwin-arm64 binary" >&2; exit 1; }
 test -f "$ROOT/bin/win32-x64/easybooks.exe" || { echo "missing win32-x64 binary" >&2; exit 1; }
+test -f "$ROOT/bin/darwin-arm64/easybooks.sha256" || { echo "missing darwin-arm64 checksum sidecar" >&2; exit 1; }
+test -f "$ROOT/bin/win32-x64/easybooks.exe.sha256" || { echo "missing win32-x64 checksum sidecar" >&2; exit 1; }
 echo "verify-release-assets: ok"

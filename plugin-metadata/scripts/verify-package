@@ -11,4 +11,37 @@ if [ -d "$ROOT/bin" ]; then
   test -d "$ROOT/bin/darwin-arm64"
   test -d "$ROOT/bin/win32-x64"
 fi
+# When bins are present, require AnyChat-style sidecars + manifest sha256.
+if [ -f "$ROOT/bin/darwin-arm64/easybooks" ] || [ -f "$ROOT/bin/win32-x64/easybooks.exe" ]; then
+  python3 - "$ROOT" <<'PY'
+import hashlib, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+runtime = json.loads((root / "runtime-manifest.json").read_text())
+binary = runtime.get("binary") or {}
+if binary.get("verifyChecksum") is not True:
+    raise SystemExit("verify-package: binary.verifyChecksum must be true when bins are present")
+errors = []
+for plat, entry in (binary.get("platforms") or {}).items():
+    rel = (entry or {}).get("entrypoint")
+    digest = (entry or {}).get("sha256")
+    if not rel or not digest:
+        errors.append(f"{plat}: missing entrypoint or sha256")
+        continue
+    artifact = root / rel
+    if not artifact.is_file() or artifact.is_symlink():
+        errors.append(f"{plat}: missing artifact {rel}")
+        continue
+    actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if actual != digest:
+        errors.append(f"{plat}: sha256 drift")
+    sidecar = artifact.with_name(artifact.name + ".sha256")
+    if not sidecar.is_file() or sidecar.is_symlink():
+        errors.append(f"{plat}: missing sidecar {sidecar.name}")
+    elif sidecar.read_text().strip().split()[0] != digest:
+        errors.append(f"{plat}: sidecar does not match manifest sha256")
+if errors:
+    print("verify-package: " + "; ".join(errors), file=sys.stderr)
+    raise SystemExit(1)
+PY
+fi
 echo "verify-package: ok"
