@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build-sign:
-    runs-on: [self-hosted, macOS, ARM64, easybooks-plugin-signing]
+    runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: write
     env:
