@@ -248,12 +248,14 @@ CI/packaging copy them into the published bundle. Document the chosen mechanism 
 ## 7. CI / packaging (full formbro-level, but Rust-only & simpler)
 
 - `.github/workflows/ci.yml` — on PR/push to main: `cargo build --release --target aarch64-apple-darwin`,
-  `cargo clippy --release -- -D warnings`, `cargo test --release`. Use `runs-on: [self-hosted, macOS, ARM64]`
-  to match formbro (fallback note for `macos-14` if no self-hosted runner).
+  `cargo clippy --release -- -D warnings`, `cargo test --release`. Select any free Mac runner by
+  capability labels only: `runs-on: [self-hosted, macOS, ARM64]`. Do not pin a named runner
+  (`easybooks-plugin-signing`).
 - `.github/workflows/publish.yml` — on immutable `plugin-v*` tag, verify exact version/source,
   build `aarch64-apple-darwin` + `x86_64-pc-windows-gnu`, require macOS signing/notarization,
   and upload one signed stage plus checksum to the source-repository Release. It never pushes the
-  marketplace.
+  marketplace. Same capability labels as CI. Keep the deploy concurrency group
+  `easybooks-plugin-${{ github.ref }}`.
 - Marketplace publication consumes the verified source Release, assembles all pending plugin
   packages, reviews the combined tree, and performs one normal fast-forward marketplace push.
 - `scripts/build-local.sh` — `cargo build --release --target aarch64-apple-darwin` then copy to

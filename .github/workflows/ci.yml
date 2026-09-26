@@ -20,8 +20,8 @@ jobs:
         run: bash scripts/assert-plugin-version-bumped.sh
 
   test:
-    # Same-owner PRs use any free self-hosted Mac runner so the identity
-    # wrapper can read the local platform checkout. Fork PRs do not run here.
+    # Same-owner PRs select any free Mac runner by capability labels
+    # [self-hosted, macOS, ARM64]. Fork PRs do not run here.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
