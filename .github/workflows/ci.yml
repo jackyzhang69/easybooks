@@ -11,7 +11,7 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64, easybooks-plugin-signing]
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -20,12 +20,12 @@ jobs:
         run: bash scripts/assert-plugin-version-bumped.sh
 
   test:
-    # Same-owner PRs use the existing 69 signing runner so the identity
+    # Same-owner PRs use any free self-hosted Mac runner so the identity
     # wrapper can read the local platform checkout. Fork PRs do not run here.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64, easybooks-plugin-signing]
+    runs-on: [self-hosted, macOS, ARM64]
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
