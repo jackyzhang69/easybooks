@@ -247,7 +247,7 @@ CI/packaging copy them into the published bundle. Document the chosen mechanism 
 
 ## 7. CI / packaging (full formbro-level, but Rust-only & simpler)
 
-- `.github/workflows/ci.yml` — on PR/push to main: `cargo build --release --target aarch64-apple-darwin`,
+- `.github/workflows/ci.yml` — on PR (and manual dispatch; no duplicate push-to-main run): `cargo build --release --target aarch64-apple-darwin`,
   `cargo clippy --release -- -D warnings`, `cargo test --release`. Select any free Mac runner by
   capability labels only: `runs-on: [self-hosted, macOS, ARM64]`. Do not pin a named runner
   (`easybooks-plugin-signing`).

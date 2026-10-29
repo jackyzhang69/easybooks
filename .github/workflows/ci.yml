@@ -1,10 +1,12 @@
 name: CI
 
+# One CI run per change: pull_request is the only automatic trigger (main is
+# fast-forwarded to the tested PR head). workflow_dispatch is the manual fallback
+# for a main tip that was not a fast-forward of a tested PR head.
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   plugin-version-gate:
