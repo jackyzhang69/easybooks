@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="${1:?signed stage dir}"
 OUT="${2:?output plugin dir}"
 rm -rf "$OUT"
-mkdir -p "$OUT/bin/darwin-arm64" "$OUT/bin/win32-x64" "$OUT/skills" "$OUT/scripts"
+mkdir -p "$OUT/bin/darwin-arm64" "$OUT/bin/win32-x64" "$OUT/bin/linux-x64" "$OUT/skills" "$OUT/scripts"
 cp -R "$ROOT/plugin-metadata/.claude-plugin" "$OUT/"
 cp -R "$ROOT/plugin-metadata/.codex-plugin" "$OUT/"
 cp "$ROOT/plugin-metadata/runtime-manifest.json" "$OUT/"
@@ -18,17 +18,21 @@ for s in verify-package verify-release-assets verify-install; do
 done
 cp "$STAGE/cli-aarch64-apple-darwin/easybooks" "$OUT/bin/darwin-arm64/easybooks"
 cp "$STAGE/cli-x86_64-pc-windows-gnu/easybooks.exe" "$OUT/bin/win32-x64/easybooks.exe"
-chmod +x "$OUT/bin/darwin-arm64/easybooks"
+cp "$STAGE/cli-x86_64-unknown-linux-gnu/easybooks" "$OUT/bin/linux-x64/easybooks"
+chmod +x "$OUT/bin/darwin-arm64/easybooks" "$OUT/bin/linux-x64/easybooks"
 # Post-sign "Seal immutable signed stage" already wrote these next to the
 # STAGE bins. The marketplace drop was copying only the two binaries. Pre-sign
 # preflight assemble has no sidecars yet — copy only when the pair is present.
 MAC_SUM="$STAGE/cli-aarch64-apple-darwin/easybooks.sha256"
 WIN_SUM="$STAGE/cli-x86_64-pc-windows-gnu/easybooks.exe.sha256"
-if [ -f "$MAC_SUM" ] || [ -f "$WIN_SUM" ]; then
+LINUX_SUM="$STAGE/cli-x86_64-unknown-linux-gnu/easybooks.sha256"
+if [ -f "$MAC_SUM" ] || [ -f "$WIN_SUM" ] || [ -f "$LINUX_SUM" ]; then
   test -f "$MAC_SUM" || { echo "assemble-official-plugin: missing $MAC_SUM" >&2; exit 1; }
   test -f "$WIN_SUM" || { echo "assemble-official-plugin: missing $WIN_SUM" >&2; exit 1; }
+  test -f "$LINUX_SUM" || { echo "assemble-official-plugin: missing $LINUX_SUM" >&2; exit 1; }
   cp "$MAC_SUM" "$OUT/bin/darwin-arm64/easybooks.sha256"
   cp "$WIN_SUM" "$OUT/bin/win32-x64/easybooks.exe.sha256"
+  cp "$LINUX_SUM" "$OUT/bin/linux-x64/easybooks.sha256"
 fi
 python3 - "$OUT" "$(git -C "$ROOT" rev-parse HEAD)" <<'PY'
 import hashlib, json, pathlib, sys

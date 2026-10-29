@@ -10,11 +10,12 @@ test "$count" = "1" || { echo "verify-package: expected 1 SKILL.md, found $count
 if [ -d "$ROOT/bin" ]; then
   test -d "$ROOT/bin/darwin-arm64"
   test -d "$ROOT/bin/win32-x64"
+  test -d "$ROOT/bin/linux-x64"
 fi
 # When bins are present, require AnyChat-style sidecars + manifest sha256.
-if [ -f "$ROOT/bin/darwin-arm64/easybooks" ] || [ -f "$ROOT/bin/win32-x64/easybooks.exe" ]; then
+if [ -f "$ROOT/bin/darwin-arm64/easybooks" ] || [ -f "$ROOT/bin/win32-x64/easybooks.exe" ] || [ -f "$ROOT/bin/linux-x64/easybooks" ]; then
   python3 - "$ROOT" <<'PY'
-import hashlib, json, pathlib, sys
+import hashlib, json, pathlib, struct, sys
 root = pathlib.Path(sys.argv[1])
 runtime = json.loads((root / "runtime-manifest.json").read_text())
 binary = runtime.get("binary") or {}
@@ -39,6 +40,15 @@ for plat, entry in (binary.get("platforms") or {}).items():
         errors.append(f"{plat}: missing sidecar {sidecar.name}")
     elif sidecar.read_text().strip().split()[0] != digest:
         errors.append(f"{plat}: sidecar does not match manifest sha256")
+    if plat == "linux-x64":
+        data = artifact.read_bytes()
+        if data[:4] != b"\x7fELF" or len(data) < 20 or data[4] != 2 or data[5] != 1:
+            errors.append("linux-x64: artifact is not a 64-bit little-endian ELF file")
+        elif struct.unpack_from("<H", data, 18)[0] != 0x3E:
+            errors.append("linux-x64: artifact is not x86-64 ELF")
+expected_platforms = {"darwin-arm64", "win32-x64", "linux-x64"}
+if set(binary.get("platforms") or {}) != expected_platforms:
+    errors.append(f"runtime manifest platforms must be exactly {sorted(expected_platforms)}")
 if errors:
     print("verify-package: " + "; ".join(errors), file=sys.stderr)
     raise SystemExit(1)

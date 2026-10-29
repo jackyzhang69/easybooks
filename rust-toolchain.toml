@@ -1,9 +1,11 @@
 [toolchain]
 channel = "stable"
 components = ["clippy", "rustfmt"]
-# Cross-compile targets used by scripts/build-local.sh and .github/workflows/publish.yml.
+# Cross-compile targets used by scripts/build-local.sh and .github/workflows/publish.yml
+# (linux-x64 builds with zig + cargo-zigbuild: scripts/official-plugin/ensure-linux-toolchain.sh).
 # (rustup installs these on demand; listing them keeps the toolchain reproducible.)
 targets = [
     "aarch64-apple-darwin",
     "x86_64-pc-windows-gnu",
+    "x86_64-unknown-linux-gnu",
 ]

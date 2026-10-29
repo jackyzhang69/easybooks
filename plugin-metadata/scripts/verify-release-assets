@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# verify-release-assets: require the two public binaries when present.
+# verify-release-assets: require the three public binaries when present.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ ! -d "$ROOT/bin" ]; then
@@ -8,6 +8,8 @@ if [ ! -d "$ROOT/bin" ]; then
 fi
 test -f "$ROOT/bin/darwin-arm64/easybooks" || { echo "missing darwin-arm64 binary" >&2; exit 1; }
 test -f "$ROOT/bin/win32-x64/easybooks.exe" || { echo "missing win32-x64 binary" >&2; exit 1; }
+test -f "$ROOT/bin/linux-x64/easybooks" || { echo "missing linux-x64 binary" >&2; exit 1; }
 test -f "$ROOT/bin/darwin-arm64/easybooks.sha256" || { echo "missing darwin-arm64 checksum sidecar" >&2; exit 1; }
 test -f "$ROOT/bin/win32-x64/easybooks.exe.sha256" || { echo "missing win32-x64 checksum sidecar" >&2; exit 1; }
+test -f "$ROOT/bin/linux-x64/easybooks.sha256" || { echo "missing linux-x64 checksum sidecar" >&2; exit 1; }
 echo "verify-release-assets: ok"

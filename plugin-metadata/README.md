@@ -44,6 +44,7 @@ The CLI defaults to the **PROD** backend (`https://easybooks.jackyzhang.app`) �
 |---|---|
 | `darwin-arm64` | `bin/darwin-arm64/easybooks` |
 | `win32-x64` | `bin/win32-x64/easybooks.exe` |
+| `linux-x64` | `bin/linux-x64/easybooks` |
 
 Each skill resolves the binary in this order — first existing executable wins:
 
@@ -52,7 +53,7 @@ Each skill resolves the binary in this order — first existing executable wins:
 3. Codex cache: `$HOME/.codex/plugins/cache/jacky-plugins/easybooks/<highest-version>/bin/<platform>/easybooks`
 4. `command -v easybooks` (manual PATH install)
 
-The public bundle currently supports `darwin-arm64` and `win32-x64`. Other hosts require an explicit trusted binary override or PATH installation.
+The public bundle currently supports `darwin-arm64`, `win32-x64` and `linux-x64`. Other hosts require an explicit trusted binary override or PATH installation.
 
 ## Install
 

@@ -4,7 +4,7 @@
 # Enforces the parts of delivery/plugin-policy.md and
 # delivery/plugin-common-module.md §5 that a machine can check:
 #   - Package shape conformance (manifest envelope, source_sha, bin naming)
-#   - Any-product host OS floor (exactly darwin-arm64 + win32-x64)
+#   - Any-product host OS floor (exactly darwin-arm64 + win32-x64 + linux-x64)
 #   - When bins are present and verifyChecksum is true: *.sha256 sidecars
 #     plus runtime-manifest platform sha256 must match the binaries
 #   - Version agreement across every metadata surface
@@ -251,23 +251,25 @@ PY
 
   # --- host OS floor + bin naming --------------------------------------------
   CUR="host-os-floor"
-  local have_mac=0 have_win=0 extra=""
+  local have_mac=0 have_win=0 have_linux=0 extra=""
   for d in "$dir"/bin/*/; do
     [ -d "$d" ] || continue
     case "$(basename "$d")" in
       darwin-arm64) have_mac=1 ;;
       win32-x64)    have_win=1 ;;
+      linux-x64)    have_linux=1 ;;
       *)            extra="$extra $(basename "$d")" ;;
     esac
   done
   [ $have_mac -eq 1 ] || fail "no bin/darwin-arm64/"
   [ $have_win -eq 1 ] || fail "no bin/win32-x64/ (macOS+Windows is a release floor, not a roadmap item)"
-  [ -n "$extra" ] && fail "unexpected binary dirs:$extra (public packages ship exactly two)"
-  [ $have_mac -eq 1 ] && [ $have_win -eq 1 ] && [ -z "$extra" ] && pass "exactly darwin-arm64 + win32-x64"
+  [ $have_linux -eq 1 ] || fail "no bin/linux-x64/ (macOS+Windows+Linux is a release floor, not a roadmap item)"
+  [ -n "$extra" ] && fail "unexpected binary dirs:$extra (public packages ship exactly three)"
+  [ $have_mac -eq 1 ] && [ $have_win -eq 1 ] && [ $have_linux -eq 1 ] && [ -z "$extra" ] && pass "exactly darwin-arm64 + win32-x64 + linux-x64"
 
   # --- checksum sidecars when verifyChecksum is on and bins are present --------
   CUR="checksum-sidecars"
-  if [ $have_mac -eq 1 ] || [ $have_win -eq 1 ]; then
+  if [ $have_mac -eq 1 ] || [ $have_win -eq 1 ] || [ $have_linux -eq 1 ]; then
     local checksum_msg
     if checksum_msg="$(python3 - "$rm" "$dir" <<'PY'
 import hashlib, json, pathlib, sys

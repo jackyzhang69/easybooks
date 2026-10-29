@@ -37,7 +37,7 @@ Resolution order — first existing executable wins:
 3. Codex cache: `$HOME/.codex/plugins/cache/jacky-plugins/easybooks/<highest-version>/bin/<platform>/easybooks`
 4. `command -v easybooks` (manual PATH install)
 
-The public bundle currently supports `darwin-arm64` and `win32-x64`; other hosts require an explicit trusted binary override or PATH installation.
+The public bundle currently supports `darwin-arm64`, `win32-x64` and `linux-x64`; other hosts require an explicit trusted binary override or PATH installation.
 
 ---
 
@@ -217,7 +217,7 @@ Routing principle: `easybooks-capabilities` is loaded first every session and po
   capabilities `["Read","Write"]`, defaultPrompt examples like:
   "Record this receipt into EasyBooks", "Log a $120 expense for software on 2026-05-01",
   "Create an invoice for <client> for <items>", "Scan my Gmail for receipts and record them").
-- `runtime-manifest.json` — declares only the currently bundled `darwin-arm64` and `win32-x64` binaries. No lazy assets (unlike FormBro — no PDF/webform runtime).
+- `runtime-manifest.json` — declares only the currently bundled `darwin-arm64`, `win32-x64` and `linux-x64` binaries. No lazy assets (unlike FormBro — no PDF/webform runtime).
 - `README.md` (marketplace-facing) describing the plugin + the connect flow.
 
 Note: the published plugin's `skills/` is populated from `.claude/skills` (or `.agents/skills`) by the
@@ -252,7 +252,7 @@ CI/packaging copy them into the published bundle. Document the chosen mechanism 
   capability labels only: `runs-on: [self-hosted, macOS, ARM64]`. Do not pin a named runner
   (`easybooks-plugin-signing`).
 - `.github/workflows/publish.yml` — on immutable `plugin-v*` tag, verify exact version/source,
-  build `aarch64-apple-darwin` + `x86_64-pc-windows-gnu`, require macOS signing/notarization,
+  build `aarch64-apple-darwin` + `x86_64-pc-windows-gnu` + `x86_64-unknown-linux-gnu` (zig + cargo-zigbuild, unsigned), require macOS signing/notarization,
   and upload one signed stage plus checksum to the source-repository Release. It never pushes the
   marketplace. Same capability labels as CI. Keep the deploy concurrency group
   `easybooks-plugin-${{ github.ref }}`.

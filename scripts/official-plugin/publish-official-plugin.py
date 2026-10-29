@@ -4,7 +4,7 @@
 One run publishes one plugin only when the staged package carries the same
 version and source commit on all three surfaces:
 
-  * darwin-arm64 + win32-x64 CLI binaries
+  * darwin-arm64 + win32-x64 + linux-x64 CLI binaries
   * public plugin tree (exactly one skills/<product>/SKILL.md)
   * live production accountd allowlist (exchange audience) or FormBro catalog
 
@@ -220,6 +220,8 @@ def require_dual_bins(staged: Path) -> None:
         raise PublishError("staged package missing bin/darwin-arm64")
     if not (staged / "bin" / "win32-x64").is_dir():
         raise PublishError("staged package missing bin/win32-x64")
+    if not (staged / "bin" / "linux-x64").is_dir():
+        raise PublishError("staged package missing bin/linux-x64")
 
 
 def require_marketplace_key(marketplace: Path | None = None) -> None:

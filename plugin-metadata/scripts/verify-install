@@ -45,6 +45,8 @@ def current_platform() -> tuple[str | None, str | None]:
         return "darwin-arm64", "easybooks"
     if system == "windows" and machine in {"amd64", "x86_64"}:
         return "win32-x64", "easybooks.exe"
+    if system == "linux" and machine in {"amd64", "x86_64"}:
+        return "linux-x64", "easybooks"
     return None, None
 
 
@@ -76,7 +78,7 @@ def main() -> int:
     if codex.get("version") != args.expected_version or claude.get("version") != args.expected_version:
         failures.append("plugin_manifest_version_mismatch")
     platforms = runtime.get("binary", {}).get("platforms", {})
-    if set(platforms) != {"darwin-arm64", "win32-x64"}:
+    if set(platforms) != {"darwin-arm64", "win32-x64", "linux-x64"}:
         failures.append("runtime_platform_set_mismatch")
 
     installed, installed_error = run_json(["codex", "plugin", "list", "--json"])

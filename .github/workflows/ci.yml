@@ -64,6 +64,20 @@ jobs:
         run: |
           "$HOME/.cargo/bin/cargo" build --release
 
+      - name: Cross-build linux-x64 (zig) and verify ELF
+        run: |
+          set -euo pipefail
+          source scripts/official-plugin/ensure-linux-toolchain.sh
+          "$HOME/.cargo/bin/cargo" zigbuild --locked --release --target x86_64-unknown-linux-gnu --bin easybooks
+          TARGET="$("$HOME/.cargo/bin/cargo" metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+          python3 - "$TARGET/x86_64-unknown-linux-gnu/release/easybooks" <<'PY'
+          import pathlib, struct, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          assert data[:4] == b"\x7fELF" and data[4] == 2 and data[5] == 1, "not 64-bit LE ELF"
+          assert struct.unpack_from("<H", data, 18)[0] == 0x3E, "not x86-64"
+          print("linux-x64 payload: ELF x86-64 ok")
+          PY
+
       - name: Cargo clippy (deny warnings)
         run: |
           "$HOME/.cargo/bin/cargo" clippy --release --all-targets -- -D warnings

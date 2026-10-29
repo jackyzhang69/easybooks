@@ -30,6 +30,7 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/rustup" target add aarch64-apple-darwin
           "$HOME/.cargo/bin/rustup" target add x86_64-pc-windows-gnu
+          "$HOME/.cargo/bin/rustup" target add x86_64-unknown-linux-gnu
           test -x /opt/homebrew/bin/x86_64-w64-mingw32-gcc
           /opt/homebrew/bin/x86_64-w64-mingw32-gcc --version >/dev/null
 
@@ -58,6 +59,9 @@ jobs:
           set -euo pipefail
           "$HOME/.cargo/bin/cargo" build --release --target aarch64-apple-darwin --bin easybooks
           "$HOME/.cargo/bin/cargo" build --release --target x86_64-pc-windows-gnu --bin easybooks
+          # linux-x64 is cross-compiled on this runner with zig + cargo-zigbuild (unsigned).
+          source scripts/official-plugin/ensure-linux-toolchain.sh
+          "$HOME/.cargo/bin/cargo" zigbuild --locked --release --target x86_64-unknown-linux-gnu --bin easybooks
 
       - name: Require signing configuration
         env:
@@ -100,10 +104,17 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$STAGE"
-          mkdir -p "$STAGE/cli-aarch64-apple-darwin" "$STAGE/cli-x86_64-pc-windows-gnu"
+          mkdir -p "$STAGE/cli-aarch64-apple-darwin" "$STAGE/cli-x86_64-pc-windows-gnu" "$STAGE/cli-x86_64-unknown-linux-gnu"
           cp target/aarch64-apple-darwin/release/easybooks "$STAGE/cli-aarch64-apple-darwin/easybooks"
           cp target/x86_64-pc-windows-gnu/release/easybooks.exe "$STAGE/cli-x86_64-pc-windows-gnu/easybooks.exe"
-          chmod +x "$STAGE/cli-aarch64-apple-darwin/easybooks"
+          cp target/x86_64-unknown-linux-gnu/release/easybooks "$STAGE/cli-x86_64-unknown-linux-gnu/easybooks"
+          chmod +x "$STAGE/cli-aarch64-apple-darwin/easybooks" "$STAGE/cli-x86_64-unknown-linux-gnu/easybooks"
+          python3 - "$STAGE/cli-x86_64-unknown-linux-gnu/easybooks" <<'PY'
+          import pathlib, struct, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          assert data[:4] == b"\x7fELF" and data[4] == 2 and data[5] == 1, "linux-x64 payload is not 64-bit LE ELF"
+          assert struct.unpack_from("<H", data, 18)[0] == 0x3E, "linux-x64 payload is not x86-64"
+          PY
 
       - name: Official plugin release-lane preflight
         run: |
@@ -150,7 +161,8 @@ jobs:
             cd "$STAGE"
             shasum -a 256 cli-aarch64-apple-darwin/easybooks > cli-aarch64-apple-darwin/easybooks.sha256
             shasum -a 256 cli-x86_64-pc-windows-gnu/easybooks.exe > cli-x86_64-pc-windows-gnu/easybooks.exe.sha256
-            tar czf easybooks-cli-signed-stage.tar.gz cli-aarch64-apple-darwin cli-x86_64-pc-windows-gnu
+            shasum -a 256 cli-x86_64-unknown-linux-gnu/easybooks > cli-x86_64-unknown-linux-gnu/easybooks.sha256
+            tar czf easybooks-cli-signed-stage.tar.gz cli-aarch64-apple-darwin cli-x86_64-pc-windows-gnu cli-x86_64-unknown-linux-gnu
             shasum -a 256 easybooks-cli-signed-stage.tar.gz > easybooks-cli-signed-stage.tar.gz.sha256
           )
 

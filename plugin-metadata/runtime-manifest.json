@@ -8,6 +8,9 @@
       },
       "win32-x64": {
         "entrypoint": "bin/win32-x64/easybooks.exe"
+      },
+      "linux-x64": {
+        "entrypoint": "bin/linux-x64/easybooks"
       }
     },
     "resolutionOrder": ["${platform}-${arch}"],
