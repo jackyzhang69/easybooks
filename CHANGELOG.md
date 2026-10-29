@@ -1,3 +1,7 @@
+## 0.5.25
+
+- Build, stage and verify the linux-x64 client from source (zig + cargo-zigbuild), so releases keep the Linux payload required by the platform plugin floor.
+
 ## 0.5.24
 
 - Official assemble no longer drops the sealed STAGE `*.sha256` sidecars, and
