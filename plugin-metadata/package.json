@@ -1,0 +1,38 @@
+{
+  "name": "dsh-easybooks",
+  "version": "0.5.25",
+  "description": "easybooks for DeepSeek Harness: Bookkeeping for self-employed Canadians via the bundled EasyBooks CLI: drop a receipt, invoice, or scan Gmail and have it recorded into EasyBooks. The CLI is the only boundary for all EasyBooks reads and writes — record income/expenses, create and send invoices, and resolve clients/categories.",
+  "license": "Proprietary",
+  "author": {
+    "name": "Jacky Zhang",
+    "url": "https://jackyzhang.app"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackyzhang69/plugins.git",
+    "directory": "plugins/easybooks"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "easybooks"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "skills",
+    "bin",
+    "runtime-manifest.json",
+    "README.md"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-skill-filesystem": "^0.1.1-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 ## 0.5.25
 
 - Build, stage and verify the linux-x64 client from source (zig + cargo-zigbuild), so releases keep the Linux payload required by the platform plugin floor.
+- Stage the DeepSeek Harness bundle (`package.json`, `cordis.patch.yml`, `index.js`) from source; 0.5.24 carried these only as out-of-band marketplace edits, which the publisher's tree replacement would have dropped.
 
 ## 0.5.24
 

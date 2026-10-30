@@ -1,0 +1,8 @@
+# DeepSeek Harness bundle layer. Installed with:
+#   dsh plugin --profile web add "github:jackyzhang69/plugins#easybooks-vX.Y.Z&path:plugins/easybooks"
+# The row mounts index.js, which registers this package's skills/ directory as
+# an isolated skill provider so the host agent sees the same easybooks contract
+# as the Claude and Codex plugin hosts.
+- insert:
+    - id: easybooks
+      name: dsh-easybooks

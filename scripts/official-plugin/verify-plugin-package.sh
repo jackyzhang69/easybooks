@@ -5,6 +5,8 @@
 # delivery/plugin-common-module.md §5 that a machine can check:
 #   - Package shape conformance (manifest envelope, source_sha, bin naming)
 #   - Any-product host OS floor (exactly darwin-arm64 + win32-x64 + linux-x64)
+#   - DeepSeek Harness bundle surface (package.json `dsh-<plugin_id>`,
+#     cordis.patch.yml, index.js)
 #   - When bins are present and verifyChecksum is true: *.sha256 sidecars
 #     plus runtime-manifest platform sha256 must match the binaries
 #   - Version agreement across every metadata surface
@@ -266,6 +268,39 @@ PY
   [ $have_linux -eq 1 ] || fail "no bin/linux-x64/ (macOS+Windows+Linux is a release floor, not a roadmap item)"
   [ -n "$extra" ] && fail "unexpected binary dirs:$extra (public packages ship exactly three)"
   [ $have_mac -eq 1 ] && [ $have_win -eq 1 ] && [ $have_linux -eq 1 ] && [ -z "$extra" ] && pass "exactly darwin-arm64 + win32-x64 + linux-x64"
+
+  # --- DeepSeek Harness (dsh) host surface ------------------------------------
+  CUR="dsh-bundle"
+  local dsh_ok=1
+  for f in package.json cordis.patch.yml index.js; do
+    [ -f "$dir/$f" ] || { fail "missing DeepSeek Harness bundle file $f"; dsh_ok=0; }
+  done
+  if [ -f "$dir/package.json" ]; then
+    local dsh_bad
+    dsh_bad="$(python3 - "$dir/package.json" "$id" "$(jqv "$cp" version)" <<'PY'
+import json, sys
+pkg = json.load(open(sys.argv[1], encoding="utf-8"))
+expected_name = f"dsh-{sys.argv[2]}"
+ref = sys.argv[3]
+bad = []
+if pkg.get("name") != expected_name:
+    bad.append(f"package.json name={pkg.get('name')!r} (expected {expected_name!r})")
+if ref and pkg.get("version") != ref:
+    bad.append(f"package.json version={pkg.get('version')!r} disagrees with plugin version {ref!r}")
+if ((pkg.get("dsh") or {}).get("bundle") or {}).get("patch") != "./cordis.patch.yml":
+    bad.append("package.json.dsh.bundle.patch must be './cordis.patch.yml'")
+print("\n".join(bad))
+raise SystemExit(1 if bad else 0)
+PY
+)" || true
+    if [ -n "$dsh_bad" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] && fail "$line"
+      done <<< "$dsh_bad"
+      dsh_ok=0
+    fi
+  fi
+  [ $dsh_ok -eq 1 ] && pass "DeepSeek Harness bundle present (dsh-$id)"
 
   # --- checksum sidecars when verifyChecksum is on and bins are present --------
   CUR="checksum-sidecars"

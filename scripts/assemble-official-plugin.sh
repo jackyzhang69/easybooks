@@ -11,6 +11,10 @@ cp -R "$ROOT/plugin-metadata/.claude-plugin" "$OUT/"
 cp -R "$ROOT/plugin-metadata/.codex-plugin" "$OUT/"
 cp "$ROOT/plugin-metadata/runtime-manifest.json" "$OUT/"
 cp "$ROOT/plugin-metadata/README.md" "$OUT/"
+# DeepSeek Harness bundle layer (delivery/plugin-policy.md required host surface).
+cp "$ROOT/plugin-metadata/package.json" "$OUT/package.json"
+cp "$ROOT/plugin-metadata/cordis.patch.yml" "$OUT/cordis.patch.yml"
+cp "$ROOT/plugin-metadata/index.js" "$OUT/index.js"
 cp -R "$ROOT/.claude/skills/easybooks" "$OUT/skills/easybooks"
 for s in verify-package verify-release-assets verify-install; do
   cp "$ROOT/plugin-metadata/scripts/$s" "$OUT/scripts/$s"
@@ -34,6 +38,24 @@ if [ -f "$MAC_SUM" ] || [ -f "$WIN_SUM" ] || [ -f "$LINUX_SUM" ]; then
   cp "$WIN_SUM" "$OUT/bin/win32-x64/easybooks.exe.sha256"
   cp "$LINUX_SUM" "$OUT/bin/linux-x64/easybooks.sha256"
 fi
+# DeepSeek Harness bundle: identity/version/patch-ref must match the plugin release.
+VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$OUT/.claude-plugin/plugin.json")"
+python3 - "$OUT/package.json" "$VERSION" <<'PY'
+import json, pathlib, sys
+pkg = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+problems = []
+if pkg.get("name") != "dsh-easybooks":
+    problems.append(f"name={pkg.get('name')!r} (expected 'dsh-easybooks')")
+if pkg.get("version") != sys.argv[2]:
+    problems.append(f"version={pkg.get('version')!r} (expected {sys.argv[2]!r})")
+if ((pkg.get("dsh") or {}).get("bundle") or {}).get("patch") != "./cordis.patch.yml":
+    problems.append("dsh.bundle.patch must be './cordis.patch.yml'")
+if problems:
+    raise SystemExit(
+        "assemble-official-plugin: DeepSeek Harness package.json mismatch: " + "; ".join(problems)
+    )
+PY
+
 python3 - "$OUT" "$(git -C "$ROOT" rev-parse HEAD)" <<'PY'
 import hashlib, json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
