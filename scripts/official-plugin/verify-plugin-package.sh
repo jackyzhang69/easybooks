@@ -277,7 +277,7 @@ PY
   done
   if [ -f "$dir/package.json" ]; then
     local dsh_bad
-    dsh_bad="$(python3 - "$dir/package.json" "$id" "$(jqv "$cp" version)" <<'PY'
+    dsh_bad="$(python3 - "$dir/package.json" "$(jqv "$cp" name)" "$(jqv "$cp" version)" <<'PY'
 import json, sys
 pkg = json.load(open(sys.argv[1], encoding="utf-8"))
 expected_name = f"dsh-{sys.argv[2]}"
@@ -300,7 +300,7 @@ PY
       dsh_ok=0
     fi
   fi
-  [ $dsh_ok -eq 1 ] && pass "DeepSeek Harness bundle present (dsh-$id)"
+  [ $dsh_ok -eq 1 ] && pass "DeepSeek Harness bundle present (dsh-$(jqv "$cp" name))"
 
   # --- checksum sidecars when verifyChecksum is on and bins are present --------
   CUR="checksum-sidecars"

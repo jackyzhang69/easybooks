@@ -160,6 +160,20 @@ class AssembleChecksumsTest(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("missing", proc.stderr)
 
+    def test_official_verifier_accepts_cli_staging_dir_name(self) -> None:
+        stage = self.tmp / "stage"
+        out = self.tmp / "easybooks-cli"
+        _write_stage(stage)
+        proc = _assemble(stage, out)
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        verify = subprocess.run(
+            ["bash", str(HERE / "verify-plugin-package.sh"), str(out)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(verify.returncode, 0, verify.stderr + verify.stdout)
+        self.assertIn("DeepSeek Harness bundle present (dsh-easybooks)", verify.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
