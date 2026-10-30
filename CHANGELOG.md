@@ -1,3 +1,7 @@
+## 0.5.26
+
+- Fix official package verification to validate the DeepSeek Harness package identity against the plugin manifest when the publisher uses a temporary `easybooks-cli` staging directory.
+
 ## 0.5.25
 
 - Build, stage and verify the linux-x64 client from source (zig + cargo-zigbuild), so releases keep the Linux payload required by the platform plugin floor.
