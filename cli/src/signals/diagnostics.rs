@@ -161,9 +161,13 @@ static DOMAIN: LazyLock<Domain> = LazyLock::new(|| {
         Regex::new(pattern).expect("constant easybooks regex")
     }
     Domain {
-        // Formats produced by `crate::client` for backend failures.
-        remote_error: re(r"(remote_error: )[^\n]*?( \(HTTP \d{3}\))"),
-        http_message: re(r"(HTTP \d{3}(?: [^:\n)]*\)?)?: )[^\n]*"),
+        // Formats produced by `crate::client` for backend failures. Server text
+        // may span lines; it ends at the client's own suffix, at anyhow's
+        // report sections, or at the end of the text.
+        remote_error: re(r"(?s)(remote_error: ).*( \(HTTP \d{3}\))"),
+        http_message: re(
+            r"(?s)(HTTP \d{3}(?: [^:\n)]*\)?)?: ).*?(\n\nCaused by:|\n\nStack backtrace:|\z)",
+        ),
         quoted: re(r#""(?:\\.|[^"\\])*""#),
         labeled: re(
             r#"(?i)((?:amount|total|subtotal|balance|price|tax|quantity)[A-Za-z_]*["']?[ \t]*[:=]?[ \t]*)[$€£]?-?\d[\d.,]*"#,
@@ -191,7 +195,7 @@ fn domain_redact(input: &str) -> String {
         format!("{}{SERVER_MESSAGE}{}", &c[1], &c[2])
     });
     let value = d.http_message.replace_all(&value, |c: &Captures<'_>| {
-        format!("{}{SERVER_MESSAGE}", &c[1])
+        format!("{}{SERVER_MESSAGE}{}", &c[1], &c[2])
     });
     let value = d.quoted.replace_all(&value, "\"[redacted]\"");
     let value = d
@@ -555,6 +559,14 @@ mod tests {
             (
                 "parsing JSON response (HTTP 502 Bad Gateway): <html>Jane</html>",
                 "parsing JSON response (HTTP 502 Bad Gateway): [server message redacted]",
+            ),
+            (
+                "HTTP 400 Bad Request: Validation failed:\nvendor Acme Plumbing Ltd unknown\n\nStack backtrace:\n   0: easybooks::client",
+                "HTTP 400 Bad Request: [server message redacted]\n\nStack backtrace:\n   0: easybooks::client",
+            ),
+            (
+                "Tell Jacky remote_error: line one\nclient Jane Doe (HTTP 409)",
+                "Tell Jacky remote_error: [server message redacted] (HTTP 409)",
             ),
         ];
         for (raw, expected) in cases {
