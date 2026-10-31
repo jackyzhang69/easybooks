@@ -20,7 +20,7 @@ use anyhow::Result;
 use clap::Args;
 use easybooks_cli::bootstrap;
 use jz_plugin_common::doctor::CommonDoctor;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Args)]
 pub struct DoctorArgs {
@@ -69,6 +69,7 @@ pub fn run(args: DoctorArgs, base_url_arg: Option<String>) -> Result<()> {
     };
 
     // ---- backend block (skipped under --no-fetch) -------------------------
+    let probe_started = Instant::now();
     let backend_block = if args.no_fetch {
         serde_json::json!({ "reachable": false, "status": "skipped" })
     } else {
@@ -101,12 +102,29 @@ pub fn run(args: DoctorArgs, base_url_arg: Option<String>) -> Result<()> {
     });
 
     if !args.no_fetch {
-        if backend_block.get("reachable").and_then(|v| v.as_bool()) == Some(true)
-            && backend_block.get("status").and_then(|v| v.as_str()) == Some("ok")
-        {
-            crate::signals::emit_named("doctor_completed", "doctor", "succeeded", "doctor", None);
+        let status = backend_block
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let reachable = backend_block.get("reachable").and_then(|v| v.as_bool()) == Some(true);
+        let mut op = crate::signals::Operation::named("doctor_completed", "doctor", "doctor");
+        op.context("operation", "doctor");
+        op.context("backend_status", status);
+        op.context("backend_reachable", reachable);
+        if reachable && status == "ok" {
+            op.record("backend_probe", probe_started, None);
+            op.succeeded();
         } else if cfg.is_some() {
-            crate::signals::emit_named("doctor_completed", "doctor", "failed", "doctor", None);
+            let code = format!("backend_{status}");
+            op.record("backend_probe", probe_started, Some(&code));
+            let hint = backend_block
+                .get("hint")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            op.failed(
+                &code,
+                &anyhow::anyhow!("backend probe failed ({status}): {hint}"),
+            );
         }
     }
 
@@ -161,8 +179,7 @@ fn backend_probe(cfg: Option<&Config>) -> serde_json::Value {
 }
 
 fn check_marketplace_upgrade(self_version: &str) -> serde_json::Value {
-    const TAGS_URL: &str =
-        "https://api.github.com/repos/jackyzhang69/easybooks/tags?per_page=100";
+    const TAGS_URL: &str = "https://api.github.com/repos/jackyzhang69/easybooks/tags?per_page=100";
     let client = match reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
         .user_agent(concat!("easybooks-cli/", env!("CARGO_PKG_VERSION")))

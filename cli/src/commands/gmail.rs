@@ -12,6 +12,7 @@
 use crate::client::ApiClient;
 use crate::commands::transactions;
 use crate::output;
+use crate::signals::Operation;
 use anyhow::{anyhow, Result};
 use serde_json::json;
 
@@ -22,26 +23,30 @@ use serde_json::json;
 /// message id (non-empty), because that id is the idempotency key that stops a
 /// re-scan from recording the same receipt twice.
 pub fn record(client: &ApiClient, raw: &str, dry_run: bool) -> Result<()> {
-    let body = transactions::build_import_body(raw, Some("gmail"))?;
+    let mut op = Operation::posting("import", dry_run);
+    let body = op.step("validate", "posting_invalid", || {
+        let body = transactions::build_import_body(raw, Some("gmail"))?;
 
-    // Guard: each entry must carry a source_id (the Gmail message id). The
-    // shared validator already requires a non-empty source_id, but we restate
-    // the intent here with a Gmail-specific message so the agent fixes the
-    // right thing.
-    if let Some(entries) = body.get("entries").and_then(|v| v.as_array()) {
-        for (i, e) in entries.iter().enumerate() {
-            let sid = e.get("source_id").and_then(|v| v.as_str()).unwrap_or("");
-            if sid.trim().is_empty() {
-                return Err(anyhow!(
-                    "entries[{}].source_id must be the Gmail message id (got empty) — \
-                     this is what prevents double-recording on re-scan",
-                    i
-                ));
+        // Guard: each entry must carry a source_id (the Gmail message id). The
+        // shared validator already requires a non-empty source_id, but we restate
+        // the intent here with a Gmail-specific message so the agent fixes the
+        // right thing.
+        if let Some(entries) = body.get("entries").and_then(|v| v.as_array()) {
+            for (i, e) in entries.iter().enumerate() {
+                let sid = e.get("source_id").and_then(|v| v.as_str()).unwrap_or("");
+                if sid.trim().is_empty() {
+                    return Err(anyhow!(
+                        "entries[{}].source_id must be the Gmail message id (got empty) — \
+                         this is what prevents double-recording on re-scan",
+                        i
+                    ));
+                }
             }
         }
-    }
+        Ok(body)
+    })?;
 
-    transactions::finish_import(client, body, dry_run)
+    transactions::finish_import(client, body, dry_run, op)
 }
 
 /// `easybooks gmail sync` — v1 STUB. Native OAuth sync ships in v2; for now the

@@ -5,6 +5,7 @@
 
 use crate::client::ApiClient;
 use crate::output;
+use crate::signals::Operation;
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Map, Value};
 
@@ -26,11 +27,23 @@ pub struct AddArgs {
 /// `easybooks income add ...` / `easybooks expense add ...`
 /// `entry_type` is "income" or "expense".
 pub fn add(client: &ApiClient, entry_type: &str, args: AddArgs) -> Result<()> {
-    validate_date(&args.date)?;
-    if let Some(c) = &args.classification {
-        validate_classification(c)?;
-    }
-    let amount_cents = parse_amount_cents(&args.amount)?;
+    let mut op = Operation::posting(entry_type, args.dry_run);
+    op.summary(format!("1 {entry_type} entry"));
+    op.context("operation", "add");
+    op.context("entry_count", 1);
+    op.context("has_category", args.category.is_some());
+    op.context("has_source_id", args.source_id.is_some());
+    op.step("validate", "posting_invalid", || {
+        validate_date(&args.date)?;
+        if let Some(c) = &args.classification {
+            validate_classification(c)?;
+        }
+        Ok(())
+    })?;
+    let amount_cents = op.step("balance", "posting_invalid", || {
+        parse_amount_cents(&args.amount)
+    })?;
+    op.detail("amount normalized to integer cents");
 
     let source_system = args
         .source_system
@@ -77,19 +90,14 @@ pub fn add(client: &ApiClient, entry_type: &str, args: AddArgs) -> Result<()> {
         }));
     }
 
-    match client.post(
-        "/api/integrations/ingest/transactions",
-        &Value::Object(body),
-    ) {
-        Ok(resp) => {
-            crate::signals::emit_posting_completed("succeeded", entry_type, None);
-            output::print_json(&resp)
-        }
-        Err(err) => {
-            crate::signals::emit_posting_completed("failed", entry_type, Some("posting_failed"));
-            Err(err)
-        }
-    }
+    let resp = op.step("post", "posting_failed", || {
+        client.post(
+            "/api/integrations/ingest/transactions",
+            &Value::Object(body),
+        )
+    })?;
+    op.succeeded();
+    output::print_json(&resp)
 }
 
 /// `easybooks tx import-json --json '<json>' [--dry-run]`
@@ -98,8 +106,11 @@ pub fn add(client: &ApiClient, entry_type: &str, args: AddArgs) -> Result<()> {
 /// identified by the API key (`Authorization: Bearer`), so there is no owner id
 /// in the body. We validate the envelope locally, then POST (or echo on dry-run).
 pub fn import_json(client: &ApiClient, raw: &str, dry_run: bool) -> Result<()> {
-    let body = build_import_body(raw, None)?;
-    finish_import(client, body, dry_run)
+    let mut op = Operation::posting("import", dry_run);
+    let body = op.step("validate", "posting_invalid", || {
+        build_import_body(raw, None)
+    })?;
+    finish_import(client, body, dry_run, op)
 }
 
 /// Build the ingest body from a raw JSON envelope.
@@ -143,8 +154,14 @@ pub fn build_import_body(
     Ok(body)
 }
 
-/// POST the assembled import body, or echo it under --dry-run.
-pub fn finish_import(client: &ApiClient, body: Map<String, Value>, dry_run: bool) -> Result<()> {
+/// POST the assembled import body, or echo it under --dry-run. `op` already
+/// holds the caller's `validate` step; this records `balance` and `post`.
+pub fn finish_import(
+    client: &ApiClient,
+    body: Map<String, Value>,
+    dry_run: bool,
+    mut op: Operation,
+) -> Result<()> {
     if dry_run {
         return output::print_json(&json!({
             "status": "dry_run",
@@ -152,18 +169,45 @@ pub fn finish_import(client: &ApiClient, body: Map<String, Value>, dry_run: bool
             "body": Value::Object(body),
         }));
     }
-    match client.post(
-        "/api/integrations/ingest/transactions",
-        &Value::Object(body),
-    ) {
-        Ok(resp) => {
-            crate::signals::emit_posting_completed("succeeded", "import", None);
-            output::print_json(&resp)
+    let (income, expense) = op.step("balance", "posting_invalid", || Ok(entry_kinds(&body)))?;
+    let count = income + expense;
+    op.detail(format!("{income} income, {expense} expense"));
+    op.summary(format!(
+        "{count} entries ({income} income, {expense} expense)"
+    ));
+    op.context("operation", "import");
+    op.context("entry_count", count);
+    op.context("income_count", income);
+    op.context("expense_count", expense);
+    op.context("source_system_kind", source_system_kind(&body));
+    let resp = op.step("post", "posting_failed", || {
+        client.post(
+            "/api/integrations/ingest/transactions",
+            &Value::Object(body),
+        )
+    })?;
+    op.succeeded();
+    output::print_json(&resp)
+}
+
+/// (income, expense) entry counts of a validated import body.
+fn entry_kinds(body: &Map<String, Value>) -> (usize, usize) {
+    let entries = body.get("entries").and_then(Value::as_array);
+    let kinds = entries.into_iter().flatten();
+    kinds.fold((0, 0), |(income, expense), entry| {
+        match entry.get("type").and_then(Value::as_str) {
+            Some("income") => (income + 1, expense),
+            _ => (income, expense + 1),
         }
-        Err(err) => {
-            crate::signals::emit_posting_completed("failed", "import", Some("posting_failed"));
-            Err(err)
-        }
+    })
+}
+
+/// Bounded kind of the free-form `source_system` (never the raw value).
+fn source_system_kind(body: &Map<String, Value>) -> &'static str {
+    match body.get("source_system").and_then(Value::as_str) {
+        Some("manual") => "manual",
+        Some("gmail") => "gmail",
+        _ => "other",
     }
 }
 

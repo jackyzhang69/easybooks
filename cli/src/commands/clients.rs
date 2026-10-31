@@ -12,6 +12,7 @@
 
 use crate::client::ApiClient;
 use crate::output;
+use crate::signals::Operation;
 use anyhow::{anyhow, Context, Result};
 use serde_json::{json, Value};
 
@@ -55,22 +56,13 @@ pub fn create(
         Value::Object(obj)
     };
 
-    match client.post("/api/integrations/clients", &body) {
-        Ok(resp) => {
-            crate::signals::emit_named("client_created", "client", "succeeded", "client", None);
-            output::print_json(&resp)
-        }
-        Err(err) => {
-            crate::signals::emit_named(
-                "client_created",
-                "client",
-                "failed",
-                "client",
-                Some("client_failed"),
-            );
-            Err(err)
-        }
-    }
+    let mut op = Operation::named("client_created", "client", "client");
+    op.context("operation", "client_create");
+    let resp = op.step("post", "client_failed", || {
+        client.post("/api/integrations/clients", &body)
+    })?;
+    op.succeeded();
+    output::print_json(&resp)
 }
 
 /// `easybooks clients update <id> [--name] [--email] [--phone] [--address] [--notes]`

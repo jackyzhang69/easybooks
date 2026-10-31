@@ -1,0 +1,48 @@
+{
+  "actor_class": "user",
+  "environment": "test",
+  "event_id": "7a9f3d7a-9762-43a3-9eb8-bf1a5de3b080",
+  "event_name": "form_fill_failed",
+  "event_version": 1,
+  "idempotency_key": "diagnostics-fixture",
+  "occurred_at": "2026-08-24T12:00:00Z",
+  "properties": {
+    "context": {
+      "<email>": "key normalized",
+      "APİKEY": "[redacted]",
+      "dbPassword": "[redacted]",
+      "nested": {
+        "cookie": "[redacted]",
+        "safe": [
+          true,
+          2.5,
+          "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value"
+        ]
+      },
+      "operation": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value"
+    },
+    "error_message": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value",
+    "error_stack": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value",
+    "metadata": {
+      "arch": "arm64",
+      "client_version": "2.0.0",
+      "host_app": "Desktop",
+      "host_app_version": "3.0.0",
+      "input_summary": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value",
+      "locale": "en-CA",
+      "os": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [re",
+      "os_version": "27.0",
+      "plugin_version": "1.0.0"
+    },
+    "steps": [
+      {
+        "detail": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [redacted]+/ [redacted] \"api_key\": \"[redacted]\" dbpassword=[redacted] clientSecret=[redacted] serviceApiKey=[redacted] monkey=value",
+        "duration_ms": 12.5,
+        "error_code": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [re",
+        "name": "~/src ~/src ~/src ~/src ~/src ~/src <email> Authorization: [redacted] [redacted] [redacted] [redacted] [redacted] [redacted] [re",
+        "status": "failed"
+      }
+    ]
+  },
+  "source": "product_server"
+}

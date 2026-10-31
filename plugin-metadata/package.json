@@ -1,6 +1,6 @@
 {
   "name": "dsh-easybooks",
-  "version": "0.5.26",
+  "version": "0.5.27",
   "description": "easybooks for DeepSeek Harness: Bookkeeping for self-employed Canadians via the bundled EasyBooks CLI: drop a receipt, invoice, or scan Gmail and have it recorded into EasyBooks. The CLI is the only boundary for all EasyBooks reads and writes — record income/expenses, create and send invoices, and resolve clients/categories.",
   "license": "Proprietary",
   "author": {

@@ -1,3 +1,7 @@
+## 0.5.27
+
+- Product Signals events (`posting_completed`, `invoice_created`, `invoice_sent`, `invoice_marked`, `client_created`, `rule_created`, `doctor_completed`) carry bounded reserved diagnostics per `product-signals-v1`: client metadata, timed steps and count-only context on every event, plus the redacted error message/report on failures. Redaction, caps and gating match the shared platform contract fixtures.
+
 ## 0.5.26
 
 - Fix official package verification to validate the DeepSeek Harness package identity against the plugin manifest when the publisher uses a temporary `easybooks-cli` staging directory.
