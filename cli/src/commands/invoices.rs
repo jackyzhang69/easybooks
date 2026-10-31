@@ -112,22 +112,11 @@ pub fn send(client: &ApiClient, invoice_id: &str) -> Result<()> {
         "/api/integrations/invoice/{}/send",
         encode_segment(invoice_id)
     );
-    match client.post(&path, &json!({})) {
-        Ok(resp) => {
-            crate::signals::emit_named("invoice_sent", "invoice", "succeeded", "invoice", None);
-            output::print_json(&resp)
-        }
-        Err(err) => {
-            crate::signals::emit_named(
-                "invoice_sent",
-                "invoice",
-                "failed",
-                "invoice",
-                Some("invoice_failed"),
-            );
-            Err(err)
-        }
-    }
+    let mut op = Operation::named("invoice_sent", "invoice", "invoice");
+    op.context("operation", "invoice_send");
+    let resp = op.step("send", "invoice_failed", || client.post(&path, &json!({})))?;
+    op.succeeded();
+    output::print_json(&resp)
 }
 
 /// `easybooks invoice get <id>`
@@ -152,22 +141,12 @@ pub fn mark(client: &ApiClient, invoice_id: &str, status: &str) -> Result<()> {
         encode_segment(invoice_id)
     );
     let body = json!({ "status": status });
-    match client.post(&path, &body) {
-        Ok(resp) => {
-            crate::signals::emit_named("invoice_marked", "invoice", "succeeded", "invoice", None);
-            output::print_json(&resp)
-        }
-        Err(err) => {
-            crate::signals::emit_named(
-                "invoice_marked",
-                "invoice",
-                "failed",
-                "invoice",
-                Some("invoice_failed"),
-            );
-            Err(err)
-        }
-    }
+    let mut op = Operation::named("invoice_marked", "invoice", "invoice");
+    op.context("operation", "invoice_mark");
+    op.context("status", status);
+    let resp = op.step("mark", "invoice_failed", || client.post(&path, &body))?;
+    op.succeeded();
+    output::print_json(&resp)
 }
 
 /// `easybooks invoice pdf <id> [--out <path>]`

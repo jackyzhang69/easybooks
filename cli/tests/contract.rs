@@ -1220,3 +1220,126 @@ fn dry_run_validation_failure_emits_no_signal() {
     assert!(seen.lock().unwrap().is_empty());
     drop(signals);
 }
+
+#[test]
+fn rule_create_failure_reports_error_and_timed_step() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/api/integrations/rules")
+        .with_status(422)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"error":"vendor Acme Plumbing for bob@example.com token=abc123secret"}"#)
+        .create();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args([
+            "rules",
+            "create",
+            "--json",
+            r#"{"match":"Acme Plumbing","category":"Repairs"}"#,
+        ])
+        .assert()
+        .failure();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["event_name"], "rule_created");
+    assert_eq!(event["outcome"], "failed");
+    assert_eq!(event["error_code"], "rule_failed");
+    let props = &event["properties"];
+    let message = props["error_message"].as_str().expect("error_message");
+    assert!(message.contains("HTTP 422"), "{message}");
+    assert!(props["error_stack"].is_string());
+    assert_eq!(
+        props["metadata"]["plugin_version"],
+        env!("CARGO_PKG_VERSION")
+    );
+    assert_eq!(props["context"]["operation"], "rule_create");
+    let wire = event.to_string();
+    for leak in ["Acme", "bob@example.com", "abc123secret", "Repairs"] {
+        assert!(!wire.contains(leak), "{leak} leaked: {wire}");
+    }
+    assert_eq!(
+        step_summary(&event),
+        [("post".to_string(), "failed".to_string())]
+    );
+    assert_eq!(props["steps"][0]["error_code"], "rule_failed");
+}
+
+#[test]
+fn invoice_send_success_reports_timed_step_without_error_fields() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/api/integrations/invoice/inv_42/send")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"sent":true}"#)
+        .create();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args(["invoice", "send", "inv_42"])
+        .assert()
+        .success();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["event_name"], "invoice_sent");
+    assert_eq!(event["outcome"], "succeeded");
+    assert!(event.get("error_code").is_none());
+    let props = &event["properties"];
+    assert!(props.get("error_message").is_none() && props.get("error_stack").is_none());
+    assert!(props["metadata"]["os"].is_string());
+    assert_eq!(
+        step_summary(&event),
+        [("send".to_string(), "succeeded".to_string())]
+    );
+}
+
+#[test]
+fn doctor_backend_failure_reports_error_and_probe_step() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let mut server = mockito::Server::new();
+    server
+        .mock("GET", "/api/integrations/whoami")
+        .with_status(500)
+        .with_body("internal error for bob@example.com")
+        .create();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args(["doctor"])
+        .assert()
+        .success();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["event_name"], "doctor_completed");
+    assert_eq!(event["outcome"], "failed");
+    assert_eq!(event["error_code"], "backend_error");
+    let props = &event["properties"];
+    let message = props["error_message"].as_str().expect("error_message");
+    assert!(
+        message.starts_with("backend probe failed (error): "),
+        "{message}"
+    );
+    assert!(!event.to_string().contains("bob@example.com"));
+    assert_eq!(props["context"]["backend_status"], "error");
+    assert_eq!(
+        step_summary(&event),
+        [("backend_probe".to_string(), "failed".to_string())]
+    );
+    assert_eq!(props["steps"][0]["error_code"], "backend_error");
+}

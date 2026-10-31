@@ -18,6 +18,9 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
+#[cfg(test)]
+mod conformance;
+
 const RESERVED: [&str; 5] = [
     "error_message",
     "error_stack",

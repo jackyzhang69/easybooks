@@ -1,10 +1,10 @@
 //! Product Signals fail-open emitter for EasyBooks.
 //!
-//! Emits `posting_completed` / `invoice_created` (plus a few `emit_named`
-//! events) to accountd. Posting and invoice events carry bounded reserved
-//! diagnostics: client metadata, timed steps, count-only context and, on
-//! failure, the redacted error message/report. Never blocks or fails the
-//! user's bookkeeping command.
+//! Every emitted event (`posting_completed`, `invoice_created`,
+//! `invoice_sent`, `client_created`, `rule_created`, `doctor_completed`) goes
+//! through [`Operation`], so each carries bounded reserved diagnostics: client
+//! metadata, timed steps, count-only context and, on failure, the redacted
+//! error message/report. Never blocks or fails the user's bookkeeping command.
 
 mod diagnostics;
 
@@ -74,26 +74,6 @@ struct Diagnostics<'a> {
     context: Option<&'a Map<String, Value>>,
 }
 
-pub(crate) fn emit_named(
-    event_name: &str,
-    key: &str,
-    outcome: &str,
-    feature: &str,
-    error_code: Option<&str>,
-) {
-    if disabled() {
-        return;
-    }
-    emit(build_event(
-        event_name,
-        key,
-        outcome,
-        feature,
-        error_code,
-        Diagnostics::default(),
-    ));
-}
-
 fn emit(event: Event) {
     let _ = signals::emit_batch(&PLUGIN_IDENTITY, &config::resolve_accountd_url(), &[event]);
 }
@@ -147,18 +127,12 @@ fn build_event(
     event
 }
 
-#[derive(Clone, Copy)]
-enum OperationKind {
-    Posting,
-    Invoice,
-}
-
-/// Records the timed sub-steps of one posting (`posting_completed`) or invoice
-/// create (`invoice_created`) and emits its single outcome event: from the
-/// first failing [`Operation::step`], or from [`Operation::succeeded`].
-/// Dry runs never emit.
+/// Records the timed sub-steps of one user operation and emits its single
+/// outcome event: from the first failing [`Operation::step`], from
+/// [`Operation::failed`], or from [`Operation::succeeded`]. Dry runs never emit.
 pub struct Operation {
-    kind: OperationKind,
+    event_name: &'static str,
+    key: &'static str,
     feature: String,
     dry_run: bool,
     steps: Vec<Step>,
@@ -168,16 +142,23 @@ pub struct Operation {
 
 impl Operation {
     pub fn posting(feature: &str, dry_run: bool) -> Self {
-        Self::new(OperationKind::Posting, feature, dry_run)
+        Self::new(EVENT_NAME, "posting", feature, dry_run)
     }
 
     pub fn invoice(dry_run: bool) -> Self {
-        Self::new(OperationKind::Invoice, "invoice", dry_run)
+        Self::new("invoice_created", "invoice", "invoice", dry_run)
     }
 
-    fn new(kind: OperationKind, feature: &str, dry_run: bool) -> Self {
+    /// Any other registered outcome event (`client_created`, `invoice_sent`,
+    /// `rule_created`, `doctor_completed`); these commands have no dry run.
+    pub fn named(event_name: &'static str, key: &'static str, feature: &str) -> Self {
+        Self::new(event_name, key, feature, false)
+    }
+
+    fn new(event_name: &'static str, key: &'static str, feature: &str, dry_run: bool) -> Self {
         Self {
-            kind,
+            event_name,
+            key,
             feature: feature.to_string(),
             dry_run,
             steps: Vec::new(),
@@ -207,19 +188,23 @@ impl Operation {
     ) -> anyhow::Result<T> {
         let started = Instant::now();
         let result = run();
-        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-        match &result {
-            Ok(_) => self.push(Step::new(name, "succeeded").with_duration_ms(elapsed_ms)),
-            Err(error) => {
-                self.push(
-                    Step::new(name, "failed")
-                        .with_duration_ms(elapsed_ms)
-                        .with_error_code(error_code),
-                );
-                self.emit("failed", Some(error_code), Some(error));
-            }
+        self.record(name, started, result.as_ref().err().map(|_| error_code));
+        if let Err(error) = &result {
+            self.emit("failed", Some(error_code), Some(error));
         }
         result
+    }
+
+    /// Record a sub-step the caller timed from `started`; `error_code` marks
+    /// it failed. Emits nothing: finish with [`Self::succeeded`] or
+    /// [`Self::failed`].
+    pub fn record(&mut self, name: &str, started: Instant, error_code: Option<&str>) {
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let step = match error_code {
+            None => Step::new(name, "succeeded"),
+            Some(code) => Step::new(name, "failed").with_error_code(code),
+        };
+        self.push(step.with_duration_ms(elapsed_ms));
     }
 
     /// Attach a count/kind-only detail to the most recent step.
@@ -231,6 +216,11 @@ impl Operation {
 
     pub fn succeeded(self) {
         self.emit("succeeded", None, None);
+    }
+
+    /// Emit the failure event for an error detected outside [`Self::step`].
+    pub fn failed(self, error_code: &str, error: &anyhow::Error) {
+        self.emit("failed", Some(error_code), Some(error));
     }
 
     fn push(&mut self, step: Step) {
@@ -252,17 +242,20 @@ impl Operation {
         error_code: Option<&str>,
         error: Option<&anyhow::Error>,
     ) -> Event {
-        let (event_name, key) = match self.kind {
-            OperationKind::Posting => (EVENT_NAME, "posting"),
-            OperationKind::Invoice => ("invoice_created", "invoice"),
-        };
         let diag = Diagnostics {
             error,
             steps: &self.steps,
             input_summary: self.input_summary.as_deref(),
             context: (!self.context.is_empty()).then_some(&self.context),
         };
-        build_event(event_name, key, outcome, &self.feature, error_code, diag)
+        build_event(
+            self.event_name,
+            self.key,
+            outcome,
+            &self.feature,
+            error_code,
+            diag,
+        )
     }
 }
 
