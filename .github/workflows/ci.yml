@@ -60,6 +60,8 @@ jobs:
           assert '[str(binary), "doctor", "--json", "--no-fetch"]' not in source
           PY
 
+      - name: Publish-path manifest integrity gate tests
+        run: python3 scripts/official-plugin/test_publish_manifest_integrity.py -v
       - name: Cargo build (release)
         run: |
           "$HOME/.cargo/bin/cargo" build --release

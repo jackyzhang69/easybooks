@@ -498,6 +498,65 @@ def git_push_marketplace(marketplace: Path, catalog: str, version: str) -> None:
     subprocess.run(["git", "-C", str(marketplace), "push", "origin", "HEAD"], check=True)
 
 
+# Integrity gate: every hash the runtime manifest records must describe the
+# bytes that actually ship. Signing (codesign/notarize, Authenticode) rewrites
+# binaries after stage-package hashes them, so a stale manifest is a real
+# failure mode: AnyScore 0.2.2 and 0.2.3 shipped darwin-arm64 hashes taken
+# before signing. Checked on the staged tree before apply and on the
+# marketplace copy after apply, before any git push.
+MANIFEST_SIZE_KEYS = ("size", "size_bytes")
+
+
+def _manifest_artifacts(node: Any, where: str) -> Any:
+    if isinstance(node, dict):
+        rel = node.get("entrypoint") or node.get("path")
+        if isinstance(rel, str) and "sha256" in node:
+            yield where, rel, node
+        for key, value in node.items():
+            yield from _manifest_artifacts(value, f"{where}.{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _manifest_artifacts(value, f"{where}[{index}]")
+
+
+def manifest_integrity_errors(root: Path) -> list[str]:
+    manifest = root / "runtime-manifest.json"
+    if not manifest.is_file():
+        return ["runtime-manifest.json missing"]
+    errors: list[str] = []
+    for where, rel, entry in _manifest_artifacts(_json_load(manifest), "runtime-manifest"):
+        artifact = root / rel
+        if not artifact.is_file():
+            if "asset" in entry:
+                continue  # release-hosted artifact, verified against its release asset
+            errors.append(f"{where}: {rel} is recorded but not shipped")
+            continue
+        data = artifact.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        if entry.get("sha256") != digest:
+            errors.append(f"{where}: sha256 {entry.get('sha256')} != shipped {digest} ({rel})")
+        for key in MANIFEST_SIZE_KEYS:
+            if key in entry and entry[key] != len(data):
+                errors.append(f"{where}: {key} {entry[key]} != shipped {len(data)} ({rel})")
+    for sidecar in sorted(root.rglob("*.sha256")):
+        target = sidecar.with_name(sidecar.name[: -len(".sha256")])
+        if not target.is_file():
+            continue
+        recorded = (sidecar.read_text(encoding="utf-8").split() or [""])[0]
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        if recorded != digest:
+            errors.append(f"{sidecar.relative_to(root)}: {recorded} != shipped {digest}")
+    return errors
+
+
+def require_manifest_integrity(root: Path, label: str) -> None:
+    errors = manifest_integrity_errors(root)
+    if errors:
+        for error in errors:
+            print(f"publish-official-plugin: {label}: {error}", file=sys.stderr)
+        raise PublishError(f"{label} runtime-manifest hashes do not match shipped bytes")
+
+
 def publish(
     plugin_id: str,
     staged: Path,
@@ -550,6 +609,7 @@ def publish(
     require_runtime_matches_package(staged, version)
     require_integrity_checksums(staged)
     run_verify_package(staged)
+    require_manifest_integrity(staged, "staged package")
     run_skill_surface(staged, plugin_id, bin_path)
     probe_backend(plugin_id, aud)
 
@@ -572,6 +632,7 @@ def publish(
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(staged, dest, symlinks=True)
+    require_manifest_integrity(dest, "marketplace copy")
     set_catalog_version(marketplace, catalog, version)
     rewrite_package_readme(dest)
     rewrite_marketplace_readme(marketplace)
