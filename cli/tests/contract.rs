@@ -991,3 +991,232 @@ fn feedback_offline_is_local_mirror_only() {
         .stderr(predicate::str::contains("not_delivered"))
         .stderr(predicate::str::contains("local_mirror"));
 }
+
+/// Mock accountd `events:batch` that records every ingest body it receives.
+fn capture_signals(
+    accountd: &mut mockito::Server,
+) -> (
+    mockito::Mock,
+    std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+) {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    let mock = accountd
+        .mock("POST", "/v1/products/easybooks/events:batch")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body_from_request(move |request| {
+            let body: serde_json::Value =
+                serde_json::from_slice(request.body().expect("signals body")).expect("json");
+            sink.lock().unwrap().push(body);
+            b"{}".to_vec()
+        })
+        .create();
+    (mock, seen)
+}
+
+fn only_event(seen: &std::sync::Mutex<Vec<serde_json::Value>>) -> serde_json::Value {
+    let batches = seen.lock().unwrap();
+    assert_eq!(batches.len(), 1, "expected one signals batch: {batches:?}");
+    let events = batches[0]["events"].as_array().expect("events array");
+    assert_eq!(events.len(), 1);
+    events[0].clone()
+}
+
+fn step_summary(event: &serde_json::Value) -> Vec<(String, String)> {
+    event["properties"]["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .map(|s| {
+            assert!(s["duration_ms"].as_f64().expect("duration_ms") >= 0.0);
+            (
+                s["name"].as_str().unwrap().to_string(),
+                s["status"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn expense_add_post_failure_reports_redacted_diagnostics() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/api/integrations/ingest/transactions")
+        .with_status(500)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"error":"vendor Acme rejected 120.00 for bob@example.com at /Users/jacky/books token=abc123secret"}"#,
+        )
+        .create();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args([
+            "expense",
+            "add",
+            "--amount",
+            "120.00",
+            "--description",
+            "Software subscription",
+            "--date",
+            "2026-05-01",
+            "--source-id",
+            "rcpt-123",
+        ])
+        .assert()
+        .failure();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["event_name"], "posting_completed");
+    assert_eq!(event["outcome"], "failed");
+    assert_eq!(event["feature_id"], "expense");
+    assert_eq!(event["error_code"], "posting_failed");
+    let props = &event["properties"];
+    let message = props["error_message"].as_str().expect("error_message");
+    assert!(message.contains("HTTP 500"), "{message}");
+    let stack = props["error_stack"].as_str().expect("error_stack");
+    let wire = event.to_string();
+    for leak in [
+        "Acme",
+        "120.00",
+        "12000",
+        "bob@example.com",
+        "jacky",
+        "abc123secret",
+        "Software subscription",
+        "rcpt-123",
+    ] {
+        assert!(!wire.contains(leak), "{leak} leaked: {wire}");
+    }
+    assert!(stack.len() <= 8192 && message.len() <= 2048);
+    assert_eq!(
+        props["metadata"]["plugin_version"],
+        env!("CARGO_PKG_VERSION")
+    );
+    assert_eq!(props["metadata"]["input_summary"], "1 expense entry");
+    assert_eq!(props["context"]["entry_count"], 1);
+    assert_eq!(
+        step_summary(&event),
+        [
+            ("validate".to_string(), "succeeded".to_string()),
+            ("balance".to_string(), "succeeded".to_string()),
+            ("post".to_string(), "failed".to_string()),
+        ]
+    );
+    assert_eq!(props["steps"][2]["error_code"], "posting_failed");
+}
+
+#[test]
+fn invoice_create_validation_failure_is_reported() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let server = mockito::Server::new();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args([
+            "invoice",
+            "create",
+            "--json",
+            r#"{"client":{"name":"Jane Doe"},"issue_date":"2026-05-01","due_date":"2026-05-31","items":[]}"#,
+        ])
+        .assert()
+        .failure();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["event_name"], "invoice_created");
+    assert_eq!(event["outcome"], "failed");
+    assert_eq!(event["error_code"], "invoice_invalid");
+    let message = event["properties"]["error_message"].as_str().unwrap();
+    assert!(
+        message.contains("`items` must be a non-empty array"),
+        "{message}"
+    );
+    assert!(!event.to_string().contains("Jane"));
+    assert_eq!(
+        step_summary(&event),
+        [("build".to_string(), "failed".to_string())]
+    );
+}
+
+#[test]
+fn invoice_create_success_reports_build_number_persist_steps() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/api/integrations/ingest/invoice")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"invoice_id":"9f0c0d3e-0000-4000-8000-000000000001","invoice_number":"INV-0042","total":2260.0,"created":true}"#)
+        .create();
+
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args([
+            "invoice",
+            "create",
+            "--json",
+            r#"{"client":{"client_id":"11111111-1111-1111-1111-111111111111"},"issue_date":"2026-05-01","due_date":"2026-05-31","items":[{"description":"Consulting","quantity":2,"unit_price":1000}],"source_id":"inv-src-1"}"#,
+        ])
+        .assert()
+        .success();
+
+    signals.assert();
+    let event = only_event(&seen);
+    assert_eq!(event["outcome"], "succeeded");
+    assert!(event.get("error_code").is_none());
+    let props = &event["properties"];
+    assert!(props.get("error_message").is_none() && props.get("error_stack").is_none());
+    assert_eq!(
+        props["metadata"]["input_summary"],
+        "1 line items; client by client_id"
+    );
+    assert_eq!(props["context"]["idempotency_key_kind"], "source_id");
+    assert_eq!(props["context"]["created"], true);
+    let wire = event.to_string();
+    for leak in ["Consulting", "2260", "INV-0042", "inv-src-1", "1000"] {
+        assert!(!wire.contains(leak), "{leak} leaked: {wire}");
+    }
+    assert_eq!(
+        step_summary(&event),
+        [
+            ("build".to_string(), "succeeded".to_string()),
+            ("number".to_string(), "succeeded".to_string()),
+            ("persist".to_string(), "succeeded".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn dry_run_validation_failure_emits_no_signal() {
+    let mut accountd = mockito::Server::new();
+    let _exchange = mock_exchange(&mut accountd);
+    let (signals, seen) = capture_signals(&mut accountd);
+    let server = mockito::Server::new();
+    let (_home, mut cmd) = product_cmd(&server, &accountd);
+    cmd.env("EASYBOOKS_PORTAL_OFFLINE", "0")
+        .env_remove("EASYBOOKS_PRODUCT_SIGNALS_ENABLED")
+        .args([
+            "tx",
+            "import-json",
+            "--json",
+            "{\"entries\":[]}",
+            "--dry-run",
+        ])
+        .assert()
+        .failure();
+    assert!(seen.lock().unwrap().is_empty());
+    drop(signals);
+}

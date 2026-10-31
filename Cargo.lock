@@ -355,6 +355,7 @@ dependencies = [
  "jz-plugin-common",
  "mockito",
  "predicates",
+ "regex",
  "reqwest",
  "rpassword",
  "serde",

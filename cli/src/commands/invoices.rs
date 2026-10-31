@@ -8,10 +8,11 @@
 
 use crate::client::ApiClient;
 use crate::output;
+use crate::signals::Operation;
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 /// `easybooks invoice create --json '<json>' [--dry-run]`
 ///
@@ -20,28 +21,62 @@ use serde_json::{json, Map, Value};
 /// "payment_details?", "source_id?" }`. Subtotal/tax/total are computed
 /// server-side; we only validate the envelope + inject the configured owner.
 pub fn create(client: &ApiClient, raw: &str, dry_run: bool) -> Result<()> {
-    let value: Value = serde_json::from_str(raw).context("--json is not valid JSON")?;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| anyhow!("--json must be a JSON object"))?;
+    let mut op = Operation::invoice(dry_run);
+    op.context("operation", "invoice_create");
+    let body = op.step("build", "invoice_invalid", || {
+        let value: Value = serde_json::from_str(raw).context("--json is not valid JSON")?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| anyhow!("--json must be a JSON object"))?;
 
-    // Minimal local validation — the backend is authoritative, but we catch
-    // obvious mistakes before a round-trip.
-    if obj.get("client").is_none() {
-        return Err(anyhow!("--json missing `client` (object or {{client_id}})"));
-    }
-    if obj.get("issue_date").and_then(|v| v.as_str()).is_none() {
-        return Err(anyhow!("--json missing string `issue_date` (YYYY-MM-DD)"));
-    }
-    if obj.get("due_date").and_then(|v| v.as_str()).is_none() {
-        return Err(anyhow!("--json missing string `due_date` (YYYY-MM-DD)"));
-    }
-    match obj.get("items").and_then(|v| v.as_array()) {
-        Some(items) if !items.is_empty() => {}
-        _ => return Err(anyhow!("--json `items` must be a non-empty array")),
-    }
+        // Minimal local validation — the backend is authoritative, but we catch
+        // obvious mistakes before a round-trip.
+        if obj.get("client").is_none() {
+            return Err(anyhow!("--json missing `client` (object or {{client_id}})"));
+        }
+        if obj.get("issue_date").and_then(|v| v.as_str()).is_none() {
+            return Err(anyhow!("--json missing string `issue_date` (YYYY-MM-DD)"));
+        }
+        if obj.get("due_date").and_then(|v| v.as_str()).is_none() {
+            return Err(anyhow!("--json missing string `due_date` (YYYY-MM-DD)"));
+        }
+        match obj.get("items").and_then(|v| v.as_array()) {
+            Some(items) if !items.is_empty() => {}
+            _ => return Err(anyhow!("--json `items` must be a non-empty array")),
+        }
 
-    let body: Map<String, Value> = obj.clone();
+        Ok(obj.clone())
+    })?;
+    let items = body
+        .get("items")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    let client_ref = if body
+        .get("client")
+        .and_then(|c| c.get("client_id"))
+        .is_some()
+    {
+        "client_id"
+    } else {
+        "inline"
+    };
+    op.detail(format!("{items} line items, client by {client_ref}"));
+    op.summary(format!("{items} line items; client by {client_ref}"));
+    op.context("item_count", items);
+    op.context("client_ref", client_ref);
+    op.context("has_tax_rate", body.contains_key("tax_rate"));
+    op.context("has_notes", body.contains_key("notes"));
+
+    // Invoice numbers are server-generated; record which idempotency key the
+    // server will use for this create.
+    let keyed_by = if body.contains_key("source_id") {
+        "source_id"
+    } else {
+        "invoice_number"
+    };
+    op.step("number", "invoice_invalid", || Ok(()))?;
+    op.detail(format!("server-assigned number; idempotent on {keyed_by}"));
+    op.context("idempotency_key_kind", keyed_by);
 
     if dry_run {
         return output::print_json(&json!({
@@ -51,16 +86,20 @@ pub fn create(client: &ApiClient, raw: &str, dry_run: bool) -> Result<()> {
         }));
     }
 
-    match client.post("/api/integrations/ingest/invoice", &Value::Object(body)) {
-        Ok(resp) => {
-            crate::signals::emit_invoice_created("succeeded", None);
-            output::print_json(&resp)
-        }
-        Err(err) => {
-            crate::signals::emit_invoice_created("failed", Some("invoice_failed"));
-            Err(err)
-        }
+    let resp = op.step("persist", "invoice_failed", || {
+        client.post("/api/integrations/ingest/invoice", &Value::Object(body))
+    })?;
+    if let Some(created) = resp.get("created").and_then(Value::as_bool) {
+        op.detail(if created {
+            "created"
+        } else {
+            "existing invoice matched"
+        });
+        op.context("created", created);
     }
+    op.context("number_assigned", resp.get("invoice_number").is_some());
+    op.succeeded();
+    output::print_json(&resp)
 }
 
 /// `easybooks invoice send <invoice_id>` → proxy to the integration send route
