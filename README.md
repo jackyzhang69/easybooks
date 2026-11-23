@@ -26,9 +26,7 @@ create a duplicate.
 - **`cli/`** — the bundled `easybooks` CLI. This is the only supported boundary
   for EasyBooks reads and writes (record transactions, create/send invoices,
   list categories/clients/invoices, health checks).
-- **`.claude/skills/`** — Claude Code agent skill docs.
-- **`.agents/skills/`** — Codex/agent mirror of the same skill docs, kept
-  byte-identical with `.claude/skills/`.
+- **`.claude/skills/`** — the agent skill docs shipped in the plugin.
 - **`plugin-metadata/`** — marketplace manifests, runtime manifest, and
   marketplace-facing README.
 - **`docs/`** — the build contract (`CONTRACT.md`, the single source of truth)

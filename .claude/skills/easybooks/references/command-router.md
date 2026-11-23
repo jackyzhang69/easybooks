@@ -19,12 +19,12 @@ Not for first-session orientation. Host agents discover the live surface via
 | "**find / search** a transaction by type / category / date / amount / text" | `easybooks tx list [--type income\|expense] [--classification business\|mixed\|personal\|unclassified] [--review needs_review\|reviewed] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--query <q>] [--limit n]` | references/record.md |
 | "**confirm** a transaction (clear needs-review without changing classification)" | `easybooks tx confirm <id>` | references/record.md |
 | "**edit** a transaction (amount / date / description / category / notes)" | `easybooks tx update <id> [--amount <d>] [--date YYYY-MM-DD] [--description "<t>"] [--category <name>] [--notes "<t>"] [--dry-run]` | references/record.md |
-| "**delete** a transaction" | `easybooks tx delete <id> [--force]` | references/record.md |
+| "**delete** a transaction" | `easybooks tx delete <id> --force` (refuses without `--force`; confirm with the user first) | references/record.md |
 | "view receipt **URL** for a transaction" | `easybooks tx receipt-url <id>` (returns signed URL) | references/record.md |
 | "**dashboard** summary (income / expenses / net / outstanding / tax estimate)" | `easybooks dashboard [--year <YYYY>]` | references/record.md |
 | "list my **categories**" | `easybooks categories list [--type income\|expense]` | references/record.md |
 | "**manage categories** (create / view)" | `easybooks categories create --name <n> --type income\|expense [--tax-deductible]` | references/record.md |
-| "**manage clients** (list / create / update / delete)" | `easybooks clients list`, `easybooks clients create --name <n> [--email --phone --address --notes]`, `easybooks clients update <id> ...`, `easybooks clients delete <id>` | references/invoice.md |
+| "**manage clients** (list / create / update / delete)" | `easybooks clients list`, `easybooks clients create --name <n> [--email --phone --address --notes]`, `easybooks clients update <id> ...`, `easybooks clients delete <id> --force` (refuses without `--force`) | references/invoice.md |
 | "get **invoice details**" | `easybooks invoice get <id>` | references/invoice.md |
 | "**mark invoice** paid / unpaid" | `easybooks invoice mark <id> --status paid\|unpaid` | references/invoice.md |
 | "**download invoice** PDF" | `easybooks invoice pdf <id> [--out <path>]` | references/invoice.md |
@@ -32,7 +32,7 @@ Not for first-session orientation. Host agents discover the live surface via
 | "list my **invoices** [that are unpaid/draft]" | `easybooks invoices list [--status <s>]` | references/invoice.md |
 | "is EasyBooks **healthy** / which backend am I on / token still valid" | `easybooks --json doctor` (local config + backend round-trip + version) | SKILL.md |
 | "**connect** EasyBooks / save my platform token / set it up" | `references/connect.md` → `easybooks login --token-stdin [--base-url <url>]` | references/connect.md |
-| "EasyBooks **out of date**?" | `easybooks --json doctor --no-fetch --check-upgrade` | references/connect.md |
+| EasyBooks was **just updated** / old install folders may remain | `easybooks doctor --repair-install`, run with the binary from the newly installed package (see Updates in SKILL.md) | SKILL.md |
 | "**connect with Jacky** / pair session / join code" | `easybooks pair join --code <CODE> --user-confirmed`, then `pair status` / `pair snapshot` / `pair inbox` / `pair read` / `pair result` / `pair close` | references/pair-session.md |
 
 ## Skill router by user intent
@@ -53,10 +53,10 @@ Not for first-session orientation. Host agents discover the live surface via
 | Connect / health | `login`, `whoami`, `doctor` |
 | List / search transactions | `tx list`, `tx receipt-url <id>`, `tx confirm <id>` |
 | Record transactions | `income add ...`, `expense add ...`, `tx import-json --json '<json>' [--dry-run]` |
-| Edit / classify transactions | `tx update <id> ...`, `tx delete <id> [--force]`, `tx reclassify <id> --class business\|mixed\|personal [--learn]`, `tx attach-receipt <id> --file <path>` |
+| Edit / classify transactions | `tx update <id> ...`, `tx delete <id> --force`, `tx reclassify <id> --class business\|mixed\|personal [--learn]`, `tx attach-receipt <id> --file <path>` |
 | Dashboard / summaries | `dashboard [--year YYYY]` |
 | Categories | `categories list [--type income\|expense]`, `categories create --name <n> --type income\|expense [--tax-deductible]` |
-| Clients | `clients list`, `clients create ...`, `clients update <id> ...`, `clients delete <id>` |
+| Clients | `clients list`, `clients create ...`, `clients update <id> ...`, `clients delete <id> --force` |
 | Invoices | `invoice get <id>`, `invoice create --json '<json>' [--dry-run]`, `invoice send <invoice_id>`, `invoice mark <id> --status paid\|unpaid`, `invoice pdf <id> [--out <path>]`, `invoice stats [--year YYYY]`, `invoices list [--status <s>]` |
 | Rules (auto-categorization) | `rules list`, `rules show <id>`, `rules create --json '<json>'`, `rules delete <id>`, `rules enable\|disable <id>`, `rules apply --scope <all\|unclassified\|selected> [--ids ..] [--rule-ids ..] [--only-auto-apply] [--commit]` |
 | Gmail (v1) | `gmail record --json '<json>' [--dry-run]`, `gmail sync` |

@@ -67,11 +67,11 @@ Two pieces are captured:
 3. **Plugin cache freshness self-check (mandatory):**
 
    ```sh
-   "$EASYBOOKS_BIN" --json doctor --no-fetch --check-upgrade
+   "$EASYBOOKS_BIN" --json doctor --no-fetch
    ```
 
    - `--no-fetch` is **required** — it skips any bootstrap/network IO and guarantees a pure local cache read.
-   - `--check-upgrade` adds one lightweight call to the GitHub Tags API to detect newer plugin releases. Cost: ~200–500 ms. Failure is non-fatal. **Surface upgrade warnings to the user when `upgrade.upgrade_available: true`** so they don't hit already-fixed bugs.
+   - Newer marketplace versions are announced by the CLI itself (see the Updates section of the router `SKILL.md`); this check does not look for them.
 
    **Failure handling — before parsing JSON:**
    - If the command exits non-zero **OR** prints anything that doesn't parse as JSON: abort the connect flow. Surface the raw output with the message "EasyBooks CLI doctor check failed — the bundled binary may not be installed correctly. Verify your plugin install and re-run." **Do not proceed to step 4 (login).**
@@ -88,15 +88,6 @@ Two pieces are captured:
 
      Wait for user direction before continuing.
    - Any other shape (missing fields, unexpected `cache.location` value): proceed but warn — log "doctor returned unexpected cache shape; continuing".
-
-   **Also branch on `upgrade.upgrade_available`** (only when `--check-upgrade` ran):
-
-   - `upgrade.upgrade_available == true`: tell the user verbatim:
-
-     > A newer EasyBooks plugin version is available; you're on the current cached one. New releases often ship bug fixes. Recommend upgrading via your plugin manager (codex: re-sync `jacky-plugins`; claude: reinstall the plugin) before continuing. Want to upgrade now, or proceed anyway?
-
-     If user says proceed: continue.
-   - `upgrade.checked == false`: log "upgrade check failed (reason); proceeding with current version" and continue silently — don't bother the user with network errors.
 
    This check is cheap (single local filesystem scan; no network IO because of `--no-fetch`) and saves the user from chasing already-fixed bugs across the rest of the session. Do not skip it.
 

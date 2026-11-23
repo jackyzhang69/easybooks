@@ -75,13 +75,12 @@ Commands:
 - `easybooks whoami`
   Calls `GET /api/integrations/whoami` (the key identifies the user). Output:
   `{ base_url, user_id, email?, scope, api_key_masked }` (user_id, optional email, and scope come from the whoami response).
-- `easybooks doctor [--no-fetch] [--check-upgrade]`
+- `easybooks doctor [--no-fetch] [--repair-install]`
   Local config check + backend round-trip + version. `--no-fetch` = pure local read (no network).
-  `--check-upgrade` = one GitHub Tags API call (non-fatal). Output shape (mirror formbro doctor):
+  `--repair-install` = make this package the only installed copy (needs no login). Output shape:
   `{ "binary_version":"0.1.0", "config":{"present":true,"path":"...","base_url":"..."},
      "backend":{"reachable":true,"status":"ok"},
-     "cache":{"location":"...|not_in_cache","stale":false,"version":"...","latest_available":"..."},
-     "upgrade":{"checked":false,"upgrade_available":false} }`
+     "cache":{"location":"...|not_in_cache","stale":false,"version":"...","latest_available":"..."} }`
 
 ### Reads (so the agent can resolve names → ids; never guess ids)
 - `easybooks categories list [--type income|expense]` → `GET /api/integrations/categories`
@@ -184,7 +183,7 @@ with its own auth; it is unchanged by this per-user-key model.
 
 ---
 
-## 4. Skills (mirror in BOTH `.claude/skills/` and `.agents/skills/`, kept byte-identical)
+## 4. Skills (`.claude/skills/`)
 
 Each skill is `<name>/SKILL.md` with frontmatter `name`, `description`, `when_to_use`.
 Skill set:
@@ -220,9 +219,8 @@ Routing principle: `easybooks-capabilities` is loaded first every session and po
 - `runtime-manifest.json` — declares only the currently bundled `darwin-arm64`, `win32-x64` and `linux-x64` binaries. No lazy assets (unlike FormBro — no PDF/webform runtime).
 - `README.md` (marketplace-facing) describing the plugin + the connect flow.
 
-Note: the published plugin's `skills/` is populated from `.claude/skills` (or `.agents/skills`) by the
-release packaging; for this repo, keep skills authored under `.claude/skills` + `.agents/skills` and have
-CI/packaging copy them into the published bundle. Document the chosen mechanism in scripts.
+Note: the published plugin's `skills/` is populated from `.claude/skills` by the release packaging
+(`scripts/assemble-official-plugin.sh`).
 
 ---
 
@@ -262,8 +260,6 @@ CI/packaging copy them into the published bundle. Document the chosen mechanism 
   `bin/darwin-arm64/easybooks`; optional codesign (env `CODESIGN_IDENTITY`).
 - `scripts/verify-runtime-readiness.sh` — JSON-emitting readiness gate: required files present
   (manifests, skills, resolved binary executable). Model on formbro's.
-- `scripts/sync-skills.sh` — assert `.claude/skills` and `.agents/skills` are byte-identical (or sync one
-  to the other); fail CI on drift.
 
 ---
 
@@ -285,10 +281,9 @@ easybooks-plugin/
     src/bootstrap/{mod.rs,resolve.rs}   (binary/version resolution; no lazy assets)
     tests/*.rs                          (assert_cmd + mockito for endpoint contracts)
   .claude/skills/<5 skills>/SKILL.md
-  .agents/skills/<5 skills>/SKILL.md    (byte-identical mirror)
   plugin-metadata/{.claude-plugin/plugin.json,.codex-plugin/plugin.json,runtime-manifest.json,README.md}
   .github/workflows/{ci.yml,publish.yml}
-  scripts/{build-local.sh,verify-runtime-readiness.sh,sync-skills.sh}
+  scripts/{build-local.sh,verify-runtime-readiness.sh}
   docs/{CONTRACT.md (this file),architecture.md}
   bin/<platform>/                       (populated by build/CI; gitignored)
 ```

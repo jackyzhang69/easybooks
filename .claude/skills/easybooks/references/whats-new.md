@@ -1,7 +1,3 @@
-# EasyBooks — what changed in this version
+# EasyBooks 0.5.28 — what changed in this version
 
-This is a packaging integrity update. Recording expenses, importing receipts,
-creating invoices, Gmail import, pair session, and Tell Jacky work the same as
-before: dry-run, confirm, then write. After an update, the agent briefly
-explains what changed and continues your prior request without making you
-repeat it.
+EasyBooks now tells you when a newer version is available, at most once a day, and it never interrupts your work. Updating the plugin now leaves a single clean copy on your computer, and your login and your books are left untouched. If an update ever looks stuck, the agent can repair the install for you. Every command now has a clearer description, so the agent explains your choices more accurately. Recording expenses, importing receipts, creating invoices, Gmail import, live support and Tell Jacky work the same as before. After an update, the agent briefly explains what changed and continues your request without making you repeat it.

@@ -58,7 +58,7 @@ All commands shell out to the bundled `easybooks` CLI. Resolve it once via `the 
 - `--amount` is a decimal (dollars), e.g. `120.00`. (Batch import JSON uses integer `amount_cents` instead — don't mix the two.)
 - `--date` is `YYYY-MM-DD`.
 - `--category` is a **name**; the backend resolves it to an id. Never pass a `category_id`. If unsure what categories exist, run `categories list` first.
-- `--classification` is one of the three deductibility labels — see **Classify every receipt** below. Never silently default an unknown purchase to `business`; ask, or mark it needs-review. Classification affects what the user can deduct.
+- `--classification` on `income add` / `expense add` accepts only `business` or `personal`. The third label, `mixed`, is set afterwards with `tx reclassify <id> --class mixed`, or as `"classification": "mixed"` inside Entry JSON for `tx import-json` — see **Classify every receipt** below. Never silently default an unknown purchase to `business`; ask, or mark it needs-review. Classification affects what the user can deduct.
 - For a value you parsed from a document (not stated by the user), prefer the import path so it carries a `--source-id` / `source_id` for idempotency.
 
 ## Resolve categories (never guess an id)
@@ -184,7 +184,7 @@ Recorded rows are upserted on **`(user_id, source_system, source_id)`**. That me
 | "record this receipt / supplier invoice / screenshot / PDF" | parse locally → Entry JSON → `tx import-json --json '<json>' --dry-run` → confirm → rerun without `--dry-run` |
 | "import this spreadsheet / CSV / bank statement of expenses" | parse rows locally → batch Entry JSON → `tx import-json --dry-run` → confirm → rerun |
 | "this should be personal / mixed, not business" / "fix the classification" | `"$EASYBOOKS_BIN" tx reclassify <id> --class business\|mixed\|personal [--learn]` |
-| "delete a transaction" | `"$EASYBOOKS_BIN" tx delete <id> [--force]` |
+| "delete a transaction" | `"$EASYBOOKS_BIN" tx delete <id> --force` (refuses without `--force`; confirm with the user first) |
 | "attach the receipt / PDF to this transaction" | `"$EASYBOOKS_BIN" tx attach-receipt <id> --file <path>` |
 | "what categories do I have" | `"$EASYBOOKS_BIN" categories list [--type income\|expense]` |
 | "scan my Gmail for receipts" | hand off to [gmail](gmail.md) (uses `gmail record`, source_id = message id) |
