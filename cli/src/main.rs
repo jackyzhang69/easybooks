@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod doctor;
 mod identity;
+mod lifecycle;
 mod output;
 mod pair;
 mod signals;
@@ -43,41 +44,41 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Persist the platform Portal token (jz_) to the shared slot ~/.jackyzhang.app/token/user.json, plus the product base-url.
+    /// Save the Portal token read from stdin to the shared token slot and store the backend URL; returns the saved paths and changes local settings only.
     Login(LoginArgs),
-    /// GET /api/integrations/whoami — confirm config + backend reachability.
+    /// Confirm the saved login works; returns the signed-in account and backend reachability, and changes nothing.
     Whoami,
-    /// Local config check + backend round-trip + version + cache freshness.
+    /// Report this install's version, config, cache freshness and (unless --no-fetch) a live backend check as JSON; --repair-install instead reinstalls this package as the only installed copy.
     Doctor(doctor::DoctorArgs),
-    /// List categories (resolve names → ids).
+    /// Look up bookkeeping categories, or create one.
     Categories(CategoriesCommand),
-    /// List / find clients (resolve names → ids).
+    /// Look up, create, update or delete clients.
     Clients(ClientsCommand),
-    /// List invoices.
+    /// List invoices, optionally filtered by status.
     Invoices(InvoicesCommand),
     /// Record a single income entry.
     Income(IncomeCommand),
     /// Record a single expense entry.
     Expense(ExpenseCommand),
-    /// Transaction batch operations.
+    /// Import, list, correct, confirm or delete transactions.
     Tx(TxCommand),
-    /// Invoice operations (create / send).
+    /// Create, read, send, mark or download invoices.
     Invoice(InvoiceCommand),
-    /// Gmail receipt/invoice recording (v1) + sync stub.
+    /// Record receipts and invoices that an agent extracted from Gmail.
     Gmail(GmailCommand),
-    /// Auto-categorization rules (QB Bank Rules inspired).
+    /// List, create, delete, toggle or apply auto-categorization rules.
     Rules(RulesCommand),
-    /// Dashboard stats summary.
+    /// Show the dashboard statistics summary, optionally for one year; returns the stats and changes nothing.
     Dashboard(DashboardCommand),
-    /// Tell Jacky — submit/inspect product feedback via portal accountd.
+    /// Send product feedback to Jacky or look up a report you sent.
     Feedback(FeedbackCommand),
-    /// Connect with Jacky's assistant for a live diagnosis
+    /// Open a live support connection with Jacky's assistant and exchange messages over it.
     #[command(subcommand)]
     Pair(PairCmd),
     /// Private operator surface (Tell Jacky admin feedback). Requires admin.json.
     #[command(hide = true)]
     Admin(AdminCommand),
-    /// Dump the public CLI command surface as JSON (plugin skill contract).
+    /// Print the complete public command surface of this binary as JSON (schema plugin-cli-commands-v2); changes nothing.
     #[command(name = "commands")]
     CliCommands {
         /// Always JSON; accepted so `easybooks commands --json` is the contract.
@@ -172,63 +173,77 @@ struct FeedbackCommand {
 
 #[derive(Subcommand)]
 enum FeedbackSubcommand {
-    /// Submit a Tell-Jacky report (requires portal jz_ token).
+    /// Send a feature request, bug report or knowledge tip to Jacky and return the created report; needs the user's confirmation flag.
     Create(FeedbackCreateArgs),
-    /// Fetch one report by id.
+    /// Fetch one feedback report you sent by its id; returns its current status and changes nothing.
     Status(FeedbackStatusArgs),
 }
 
 #[derive(Subcommand)]
 enum PairCmd {
-    /// Join with the code from Jacky's assistant after the person agrees
+    /// Join a support connection with the code from Jacky's assistant, only after the user agrees; returns the connection state.
     Join {
+        /// Code that Jacky's assistant gave the user.
         #[arg(long)]
         code: String,
+        /// Pass this only after the user explicitly agreed to connect.
         #[arg(long, default_value_t = false)]
         user_confirmed: bool,
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// Show whether a connection is open
+    /// Show whether a support connection is open; changes nothing.
     Status {
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// Send the current product envelope
+    /// Send the current product envelope (a JSON snapshot of the user's EasyBooks state) to Jacky's assistant.
     Snapshot {
         /// JSON envelope file; `-` reads stdin
         #[arg(long, value_name = "PATH")]
         envelope_json: String,
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// Show unread instructions from Jacky's assistant
+    /// Show unread instructions from Jacky's assistant; does not mark them read.
     Inbox {
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// Mark one instruction read after showing it
+    /// Mark one instruction as read after you have shown it to the user.
     Read {
+        /// Id of the instruction, from `pair inbox`.
         #[arg(long)]
         message_id: String,
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// Send the outcome of a requested action
+    /// Send the outcome of an action Jacky's assistant asked for, as success or failure.
     Result {
+        /// Pass when the requested action succeeded; omit it to report a failure.
         #[arg(long)]
         ok: bool,
+        /// Short error text to send when the action failed.
         #[arg(long)]
         error: Option<String>,
+        /// Optional JSON envelope file with the result details; `-` reads stdin
         #[arg(long, value_name = "PATH")]
         envelope_json: Option<String>,
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
-    /// End the connection
+    /// End the support connection.
     Close {
+        /// Short reason for closing, such as done.
         #[arg(long, default_value = "done")]
         reason: String,
+        /// Print JSON instead of plain text.
         #[arg(long, default_value_t = false)]
         json: bool,
     },
@@ -242,7 +257,7 @@ struct FeedbackCreateArgs {
     /// Description body.
     #[arg(long)]
     description: String,
-    /// feature-request | bug-report | knowledge-tip
+    /// Kind of report: feature-request, bug-report or knowledge-tip.
     #[arg(long, default_value = "bug-report")]
     kind: String,
     /// Required idempotency key for safe retries.
@@ -255,6 +270,7 @@ struct FeedbackCreateArgs {
 
 #[derive(Args)]
 struct FeedbackStatusArgs {
+    /// Id of the report, from `feedback create`.
     #[arg(long)]
     report_id: String,
 }
@@ -282,15 +298,18 @@ struct CategoriesCommand {
 
 #[derive(Subcommand)]
 enum CategoriesSub {
-    /// GET /api/integrations/categories
+    /// List bookkeeping categories (name and id), optionally only income or expense ones; changes nothing.
     List {
+        /// Only categories of this type.
         #[arg(long = "type", value_enum)]
         type_filter: Option<TxType>,
     },
-    /// POST /api/integrations/categories — create a new category.
+    /// Create a new category and return it.
     Create {
+        /// Category name.
         #[arg(long)]
         name: String,
+        /// Whether the category is for income or expense.
         #[arg(long = "type", value_enum)]
         type_: TxType,
         /// Mark the category as tax-deductible.
@@ -307,45 +326,58 @@ struct ClientsCommand {
 
 #[derive(Subcommand)]
 enum ClientsSub {
-    /// GET /api/integrations/clients
+    /// List all clients (name and id); changes nothing.
     List,
-    /// GET /api/integrations/clients?query=<q>
+    /// Find clients whose details match a text query; returns the matches and changes nothing.
     Find {
+        /// Text to match against client names and details.
         #[arg(long)]
         query: String,
     },
-    /// POST /api/integrations/clients — create a new client.
+    /// Create a new client from individual flags or a raw JSON object, and return it.
     Create {
+        /// Client name.
         #[arg(long)]
         name: Option<String>,
+        /// Client email address.
         #[arg(long)]
         email: Option<String>,
+        /// Client phone number.
         #[arg(long)]
         phone: Option<String>,
+        /// Client postal address.
         #[arg(long)]
         address: Option<String>,
+        /// Free-text notes about the client.
         #[arg(long)]
         notes: Option<String>,
         /// Post a raw JSON object instead of individual flags.
         #[arg(long)]
         json: Option<String>,
     },
-    /// PATCH /api/integrations/clients/{id} — update a client (only provided fields).
+    /// Update the provided fields of one client and return the updated client.
     Update {
+        /// Id of the client, from `clients list` or `clients find`.
         client_id: String,
+        /// New client name.
         #[arg(long)]
         name: Option<String>,
+        /// New email address.
         #[arg(long)]
         email: Option<String>,
+        /// New phone number.
         #[arg(long)]
         phone: Option<String>,
+        /// New postal address.
         #[arg(long)]
         address: Option<String>,
+        /// New notes.
         #[arg(long)]
         notes: Option<String>,
     },
-    /// DELETE /api/integrations/clients/{id} — delete a client.
+    /// Permanently delete one client; refuses unless --force is given.
     Delete {
+        /// Id of the client, from `clients list` or `clients find`.
         client_id: String,
         /// Required guard: confirm the deletion (non-interactive CLI).
         #[arg(long, default_value_t = false)]
@@ -361,8 +393,9 @@ struct InvoicesCommand {
 
 #[derive(Subcommand)]
 enum InvoicesSub {
-    /// GET /api/integrations/invoices
+    /// List invoices (id, client, status, totals), optionally only one status; changes nothing.
     List {
+        /// Only invoices in this status, such as paid or unpaid.
         #[arg(long)]
         status: Option<String>,
     },
@@ -444,22 +477,31 @@ impl ReclassClass {
 /// Shared flag set for `income add` / `expense add`.
 #[derive(Args)]
 struct EntryAddArgs {
+    /// Amount in dollars as a decimal, such as 12.50.
     #[arg(long)]
     amount: String,
+    /// What the entry is for.
     #[arg(long)]
     description: String,
+    /// Entry date, YYYY-MM-DD.
     #[arg(long)]
     date: String,
+    /// Category name; the backend resolves it to a category id.
     #[arg(long)]
     category: Option<String>,
+    /// Whether the entry is business or personal.
     #[arg(long, value_enum)]
     classification: Option<Classification>,
+    /// Name of the system the entry came from, used for idempotency with --source-id.
     #[arg(long = "source-system")]
     source_system: Option<String>,
+    /// Id of the entry in the source system; a repeat with the same value is not recorded twice.
     #[arg(long = "source-id")]
     source_id: Option<String>,
+    /// Free-text notes.
     #[arg(long)]
     notes: Option<String>,
+    /// Print the entry that would be sent without recording it.
     #[arg(long = "dry-run", default_value_t = false)]
     dry_run: bool,
 }
@@ -488,7 +530,7 @@ struct IncomeCommand {
 
 #[derive(Subcommand)]
 enum IncomeSub {
-    /// Record one income entry via POST /api/integrations/ingest/transactions.
+    /// Record one income entry and return the backend's result; --dry-run previews without writing.
     Add(EntryAddArgs),
 }
 
@@ -500,7 +542,7 @@ struct ExpenseCommand {
 
 #[derive(Subcommand)]
 enum ExpenseSub {
-    /// Record one expense entry via POST /api/integrations/ingest/transactions.
+    /// Record one expense entry and return the backend's result; --dry-run previews without writing.
     Add(EntryAddArgs),
 }
 
@@ -512,15 +554,16 @@ struct TxCommand {
 
 #[derive(Subcommand)]
 enum TxSub {
-    /// Batch ingest: --json '{ source_system, entries:[Entry] }'.
+    /// Record a batch of entries from a JSON document ({ source_system, entries:[...] }); --dry-run previews without writing.
     ImportJson {
+        /// JSON document: { "source_system": "...", "entries": [ ... ] }.
         #[arg(long)]
         json: String,
+        /// Print the batch that would be sent without recording it.
         #[arg(long = "dry-run", default_value_t = false)]
         dry_run: bool,
     },
-    /// Correct a transaction's classification (business|mixed|personal). With
-    /// `--learn` the backend remembers the correction for that sender.
+    /// Change one transaction's classification to business, mixed or personal; --learn makes the backend remember it for that sender.
     Reclassify {
         /// The transaction id to reclassify.
         transaction_id: String,
@@ -531,8 +574,7 @@ enum TxSub {
         #[arg(long, default_value_t = false)]
         learn: bool,
     },
-    /// Attach a receipt document (image/PDF) to a transaction. The file is read
-    /// locally, size-checked (<=10MB), and base64-encoded before upload.
+    /// Attach a receipt image or PDF (up to 10 MB) to one transaction; the file is read locally and uploaded.
     AttachReceipt {
         /// The transaction id to attach the receipt to.
         transaction_id: String,
@@ -540,53 +582,69 @@ enum TxSub {
         #[arg(long)]
         file: String,
     },
-    /// GET /api/integrations/transactions — list transactions with optional filters.
+    /// List transactions, optionally filtered by type, classification, review state, dates or text; returns matches and changes nothing.
     List {
+        /// Only income or only expense transactions.
         #[arg(long = "type", value_enum)]
         type_filter: Option<TxType>,
+        /// Only transactions with this classification.
         #[arg(long, value_enum)]
         classification: Option<TxListClass>,
+        /// Only transactions in this review state: needs_review or reviewed.
         #[arg(long)]
         review: Option<String>,
+        /// Only transactions on or after this date, YYYY-MM-DD.
         #[arg(long)]
         from: Option<String>,
+        /// Only transactions on or before this date, YYYY-MM-DD.
         #[arg(long)]
         to: Option<String>,
         /// Full-text search query (sent as `q`).
         #[arg(long)]
         query: Option<String>,
+        /// Maximum number of transactions to return.
         #[arg(long)]
         limit: Option<u32>,
     },
-    /// GET /api/integrations/transactions/{id}/receipt-url
+    /// Get a time-limited signed URL for one transaction's attached receipt; changes nothing.
     ReceiptUrl {
+        /// The transaction id.
         transaction_id: String,
         /// Signed-URL expiry in seconds.
         #[arg(long)]
         expires: Option<u32>,
     },
-    /// POST /api/integrations/transactions/{id}/confirm
-    Confirm { transaction_id: String },
-    /// PATCH /api/integrations/transactions/{id} — update fields (only provided).
-    Update {
+    /// Mark one transaction as reviewed (clears needs-review) without changing its classification.
+    Confirm {
+        /// The transaction id to confirm.
         transaction_id: String,
+    },
+    /// Change the provided fields of one transaction; --dry-run prints the change without sending it.
+    Update {
+        /// The transaction id to update.
+        transaction_id: String,
+        /// New amount in dollars as a decimal.
         #[arg(long)]
         amount: Option<String>,
+        /// New date, YYYY-MM-DD.
         #[arg(long)]
         date: Option<String>,
+        /// New description.
         #[arg(long)]
         description: Option<String>,
         /// Category name (maps to `category_name` in the request body).
         #[arg(long)]
         category: Option<String>,
+        /// New notes.
         #[arg(long)]
         notes: Option<String>,
         /// Print the PATCH body without calling the backend.
         #[arg(long = "dry-run", default_value_t = false)]
         dry_run: bool,
     },
-    /// DELETE /api/integrations/transactions/{id} — delete a transaction.
+    /// Permanently delete one transaction; refuses unless --force is given.
     Delete {
+        /// The transaction id to delete.
         transaction_id: String,
         /// Required guard: confirm the deletion (non-interactive CLI).
         #[arg(long, default_value_t = false)]
@@ -602,35 +660,44 @@ struct InvoiceCommand {
 
 #[derive(Subcommand)]
 enum InvoiceSub {
-    /// Create an invoice via POST /api/integrations/ingest/invoice.
+    /// Create an invoice from a JSON document and return it with the server-computed totals; --dry-run previews without saving.
     Create {
+        /// JSON document: client or client_id, issue_date, due_date, items, optional tax_rate and notes.
         #[arg(long)]
         json: String,
+        /// Validate and show the computed totals without creating the invoice.
         #[arg(long = "dry-run", default_value_t = false)]
         dry_run: bool,
     },
-    /// Send an invoice/receipt email via the legacy backend.
+    /// Email one invoice to its client and return the backend's answer; this contacts the client.
     Send {
         /// The invoice id.
         invoice_id: String,
     },
-    /// GET /api/integrations/invoices/{id} — fetch a single invoice.
-    Get { invoice_id: String },
-    /// POST /api/integrations/invoice/{id}/status — mark paid or unpaid.
-    Mark {
+    /// Fetch one invoice with its items and totals; changes nothing.
+    Get {
+        /// The invoice id.
         invoice_id: String,
+    },
+    /// Mark one invoice as paid or unpaid and return the result.
+    Mark {
+        /// The invoice id.
+        invoice_id: String,
+        /// New status: paid or unpaid.
         #[arg(long)]
         status: String,
     },
-    /// GET /api/integrations/invoice/{id}/pdf — download and save the PDF.
+    /// Download one invoice as a PDF file and print the saved path.
     Pdf {
+        /// The invoice id.
         invoice_id: String,
         /// Output file path (default: ./<filename from response>).
         #[arg(long)]
         out: Option<String>,
     },
-    /// GET /api/integrations/invoices/stats — invoice aggregate stats.
+    /// Show invoice totals by status, optionally for one year; changes nothing.
     Stats {
+        /// Only invoices of this year, YYYY.
         #[arg(long)]
         year: Option<u32>,
     },
@@ -644,15 +711,16 @@ struct GmailCommand {
 
 #[derive(Subcommand)]
 enum GmailSub {
-    /// Record agent-extracted Gmail receipts/invoices (source_system=gmail,
-    /// source_id = Gmail message id). Alias of `tx import-json`.
+    /// Record receipts and invoices that an agent extracted from Gmail (same as `tx import-json` with source_system gmail); --dry-run previews without writing.
     Record {
+        /// JSON document: { "entries": [ ... ] }, each entry's source_id being the Gmail message id.
         #[arg(long)]
         json: String,
+        /// Print the batch that would be sent without recording it.
         #[arg(long = "dry-run", default_value_t = false)]
         dry_run: bool,
     },
-    /// v1 STUB — native OAuth sync ships in v2.
+    /// Placeholder that only reports that native Gmail sync is not available yet; changes nothing.
     Sync,
 }
 
@@ -671,22 +739,35 @@ struct DashboardCommand {
 
 #[derive(Subcommand)]
 enum RulesSub {
-    /// GET /api/integrations/rules
+    /// List auto-categorization rules; changes nothing.
     List,
-    /// GET /api/integrations/rules/{id}
-    Show { rule_id: String },
-    /// POST /api/integrations/rules with the raw `--json` rule payload.
+    /// Show one rule's definition; changes nothing.
+    Show {
+        /// The rule id.
+        rule_id: String,
+    },
+    /// Create a rule from a JSON rule definition and return it.
     Create {
+        /// JSON rule definition.
         #[arg(long)]
         json: String,
     },
-    /// DELETE /api/integrations/rules/{id}
-    Delete { rule_id: String },
-    /// PATCH /api/integrations/rules/{id} {enabled:true}
-    Enable { rule_id: String },
-    /// PATCH /api/integrations/rules/{id} {enabled:false}
-    Disable { rule_id: String },
-    /// POST /api/integrations/rules/apply — dry-run preview unless `--commit`.
+    /// Permanently delete one rule.
+    Delete {
+        /// The rule id.
+        rule_id: String,
+    },
+    /// Turn one rule on.
+    Enable {
+        /// The rule id.
+        rule_id: String,
+    },
+    /// Turn one rule off.
+    Disable {
+        /// The rule id.
+        rule_id: String,
+    },
+    /// Preview which transactions the rules would reclassify; only --commit writes the changes.
     Apply {
         /// Selection scope: all | unclassified | selected.
         #[arg(long)]
@@ -707,8 +788,14 @@ enum RulesSub {
 }
 
 fn main() {
-    if let Err(error) = run() {
-        output::print_error(&error);
+    let result = run();
+    if let Err(error) = &result {
+        output::print_error(error);
+    }
+    // The daily update notice runs after the command finished, on success and
+    // on failure, and never changes the exit code.
+    lifecycle::after_command();
+    if result.is_err() {
         std::process::exit(1);
     }
 }
@@ -734,6 +821,7 @@ fn run() -> Result<()> {
     // them first so they work before/without a successful `Config::load`.
     match cli.command {
         Command::Login(args) => setup::login_from_stdin(args.token_stdin, args.base_url),
+        Command::Doctor(args) if args.repair_install => lifecycle::repair_install(),
         Command::Doctor(args) => doctor::run(args, base_url_arg),
         Command::CliCommands { json: _ } => print_plugin_cli_commands(),
         other => dispatch(other, base_url_arg),
@@ -746,40 +834,11 @@ fn print_plugin_cli_commands() -> Result<()> {
 }
 
 fn plugin_cli_commands_payload() -> serde_json::Value {
-    let mut commands = Vec::new();
-    collect_public_command_paths(&Cli::command(), &mut Vec::new(), &mut commands);
-    serde_json::json!({
-        "schema": "plugin-cli-commands-v1",
-        "bin": "easybooks",
-        "version": env!("CARGO_PKG_VERSION"),
-        "commands": commands
-            .into_iter()
-            .map(|path| serde_json::json!({ "path": path }))
-            .collect::<Vec<_>>(),
-    })
-}
-
-fn collect_public_command_paths(
-    cmd: &clap::Command,
-    prefix: &mut Vec<String>,
-    out: &mut Vec<Vec<String>>,
-) {
-    let visible: Vec<&clap::Command> = cmd
-        .get_subcommands()
-        .filter(|sub| !sub.is_hide_set())
-        .filter(|sub| sub.get_name() != "help" && sub.get_name() != "admin")
-        .collect();
-    if visible.is_empty() {
-        if !prefix.is_empty() {
-            out.push(prefix.clone());
-        }
-        return;
-    }
-    for sub in visible {
-        prefix.push(sub.get_name().to_string());
-        collect_public_command_paths(sub, prefix, out);
-        prefix.pop();
-    }
+    jz_plugin_lifecycle::commands::clap_payload(
+        Cli::command(),
+        "easybooks",
+        env!("CARGO_PKG_VERSION"),
+    )
 }
 
 /// Build the authenticated client from config and dispatch every command that
@@ -797,7 +856,7 @@ fn dispatch(command: Command, base_url_arg: Option<String>) -> Result<()> {
         let operation = easybooks_cli::envelope::operation_from_args(&original_args);
         let envelope = easybooks_cli::envelope::connection_not_ready(&operation, original_args);
         easybooks_cli::envelope::print_stdout(&envelope)?;
-        std::process::exit(0);
+        return Ok(());
     }
     let config = loaded?;
     let client = client::ApiClient::from_config(&config)?;
@@ -1487,7 +1546,7 @@ mod tests {
     #[test]
     fn commands_json_schema_lists_public_paths_and_omits_admin() {
         let payload = super::plugin_cli_commands_payload();
-        assert_eq!(payload["schema"], "plugin-cli-commands-v1");
+        assert_eq!(payload["schema"], "plugin-cli-commands-v2");
         assert_eq!(payload["bin"], "easybooks");
         assert_eq!(payload["version"], env!("CARGO_PKG_VERSION"));
         let paths: Vec<Vec<String>> = payload["commands"]
@@ -1523,6 +1582,19 @@ mod tests {
             cli.command,
             super::Command::CliCommands { json: true }
         ));
+    }
+
+    #[test]
+    fn every_public_command_has_a_summary() {
+        let payload = super::plugin_cli_commands_payload();
+        for command in payload["commands"].as_array().expect("commands") {
+            let summary = command["summary"].as_str().unwrap_or_default();
+            assert!(
+                !summary.trim().is_empty(),
+                "public command {} has no summary",
+                command["path"]
+            );
+        }
     }
 
     #[test]

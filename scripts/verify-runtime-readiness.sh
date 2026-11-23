@@ -6,7 +6,7 @@
 #
 # Checks:
 #   - manifests present: runtime-manifest.json + .claude-plugin/plugin.json (+ .codex-plugin/plugin.json if authored)
-#   - skills present in BOTH mirrors (.claude/skills and .agents/skills) and non-empty
+#   - skills present (.claude/skills) and non-empty
 #   - the resolved CLI binary exists and is executable
 #       resolution order (mirrors CONTRACT §0 binary resolver, local subset):
 #         1. $EASYBOOKS_BIN
@@ -71,9 +71,8 @@ if [[ -d "$ROOT/plugin-metadata/.codex-plugin" ]]; then
   require_file "$ROOT/plugin-metadata/.codex-plugin/plugin.json"
 fi
 
-# --- Skills present in both mirrors ---
+# --- Skills present ---
 require_nonempty_dir "$ROOT/.claude/skills"
-require_nonempty_dir "$ROOT/.agents/skills"
 
 # --- Resolved binary executable ---
 resolved_bin=""

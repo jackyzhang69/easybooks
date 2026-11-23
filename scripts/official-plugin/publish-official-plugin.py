@@ -109,22 +109,18 @@ def resolve_render_public_plugin_docs() -> Path:
         if path.is_file():
             return path
         raise PublishError(f"RENDER_PUBLIC_PLUGIN_DOCS is not a file: {env}")
-    candidates = [
-        Path("/Users/jacky/platform/governance/scripts/official-plugin/render_public_plugin_docs.py"),
-        Path.home()
-        / ".local/share/platform-governance/governance/scripts/official-plugin/render_public_plugin_docs.py",
-        Path("/agent/repos/platform/governance/scripts/official-plugin/render_public_plugin_docs.py"),
-    ]
-    for path in candidates:
-        if path.is_file():
-            return path
-    raise PublishError(
-        "render_public_plugin_docs.py not found (set RENDER_PUBLIC_PLUGIN_DOCS or install platform governance)"
-    )
+    # The renderer and hosts.yaml are copied beside this publisher; no governance
+    # mirror on the runner is ever read.
+    path = HERE / "render_public_plugin_docs.py"
+    if path.is_file():
+        return path
+    raise PublishError(f"missing {path}")
 
 
 def run_render_public_plugin_docs(args: list[str]) -> None:
     script = resolve_render_public_plugin_docs()
+    if script == HERE / "render_public_plugin_docs.py":
+        args = ["--hosts", str(HERE / "hosts.yaml"), *args]
     proc = subprocess.run(
         [sys.executable, str(script), *args],
         capture_output=True,
@@ -392,8 +388,8 @@ def commands_json(bin_path: Path) -> dict[str, Any]:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise PublishError("commands --json is not JSON") from exc
-    if payload.get("schema") != "plugin-cli-commands-v1":
-        raise PublishError("commands --json schema is not plugin-cli-commands-v1")
+    if payload.get("schema") != "plugin-cli-commands-v2":
+        raise PublishError("commands --json schema is not plugin-cli-commands-v2")
     return payload
 
 

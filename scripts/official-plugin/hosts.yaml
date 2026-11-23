@@ -1,0 +1,114 @@
+# Public plugin host contract — CURRENT
+# Authority: delivery/plugin-policy.md + delivery/plugin-common-module.md
+#
+# Portable contract (always true): every official package ships one Agent Skills
+# tree under skills/<plugin_id>/ plus the native CLI under bin/. Any agent that
+# can load a SKILL.md folder (or the full plugin tree) can use the product.
+# Marketplace add / plugin install commands are optional convenience recipes,
+# not the definition of support.
+#
+# Version authority stays in each host plugin.json / runtime-manifest / CLI.
+# This file must never become a version source.
+
+schema: plugin-hosts-v1
+
+portable:
+  skill_standard: agent_skills
+  skill_path: skills/<plugin_id>/SKILL.md
+  package_tree: plugins/<plugin_id>/
+  canonical_cli: ~/.jackyzhang.app/plugins/<plugin_id>/current
+  marketplace_repo: jackyzhang69/plugins
+  note: >-
+    Attach the full plugin tree (skills + bin + runtime-manifest) when the host
+    can see a folder, or load the skill after the canonical CLI is already
+    installed at the path above. Skill-only attach without that CLI cannot run
+    product verbs.
+  marketplace_install_note: >-
+    Marketplace installs must use --sparse. The repository carries every
+    plugin's native binaries (a plain checkout is about 300 MB, the full history
+    over 1 GB), and Codex clones the whole history under a 30 second limit, so
+    a plain add fails. --sparse fetches only the catalog and the plugins you
+    list, so pass every plugin you want. Narrow each listed plugin to this
+    host's `bin/<os-arch>` directory: listing whole `plugins/<plugin_id>`
+    packages still pulls all three OS binaries and times out (measured
+    2026-11-21: 13 s per-OS versus 44 s full, on host 69 and Jacky's Mac). To add one later, append
+    the plugin's subdirectories plus its `bin/<os-arch>` to the marketplace's
+    sparse paths instead of removing
+    the marketplace (removing it uninstalls its plugins). Codex - sparse_paths
+    of jacky-plugins in ~/.codex/config.toml, then codex plugin marketplace
+    upgrade jacky-plugins. Claude Code - sparsePaths of jacky-plugins in both
+    settings.json (extraKnownMarketplaces) and plugins/known_marketplaces.json,
+    then claude plugin marketplace update jacky-plugins.
+
+# recipes: known install UX. Missing from this list does NOT mean unsupported.
+recipes:
+  - id: claude-code
+    kind: marketplace_plugin
+    public_recipe: true
+    manifest: .claude-plugin/plugin.json
+    required_in_package: true
+    marketplace_catalog: .claude-plugin/marketplace.json
+    title: Claude Code
+    steps:
+      - "claude plugin marketplace add jackyzhang69/plugins --sparse .claude-plugin plugins/<plugin_id>"
+      - "claude plugin install <plugin_id>@jacky-plugins"
+
+  - id: codex
+    kind: marketplace_plugin
+    public_recipe: true
+    manifest: .codex-plugin/plugin.json
+    required_in_package: true
+    marketplace_catalog: .agents/plugins/marketplace.json
+    title: Codex CLI / Codex App
+    steps:
+      - "codex plugin marketplace add jackyzhang69/plugins --sparse .agents/plugins --sparse plugins/<plugin_id>"
+      - "codex plugin add <plugin_id>@jacky-plugins"
+    note: >-
+      On a host that already tracks the marketplace, list the same paths in
+      Codex `sparse_paths` for `jacky-plugins` and run
+      `codex plugin marketplace upgrade jacky-plugins`; do not remove and re-add
+      the marketplace, which uninstalls its plugins. The root catalog is
+      `.agents/plugins` (the repository has no root `.codex-plugin`).
+      Per-OS narrowing is required: a Codex clone refreshes the marketplace
+      under a 30 second limit, so sparse paths must name the plugins this host
+      installs, each package's own subdirectories, and only that host's
+      `bin/<os-arch>` directory. Listing the whole `plugins/<plugin_id>`
+      package (all three OS binaries) times out at 30 s even on host 69 and
+      Jacky's Mac; the per-OS form measured 13 s on both (2026-11-21).
+
+  - id: cursor
+    kind: skills_or_marketplace_cache
+    public_recipe: false
+    required_in_package: false
+    title: Cursor
+    note: >-
+      Cursor may resolve the same public skills from the jacky-plugins
+      marketplace cache when that host plugin is present. There is no separate
+      Cursor marketplace. Same portable contract as any Agent Skills host.
+
+  - id: cherry-studio
+    kind: agent_skills
+    public_recipe: false
+    required_in_package: false
+    title: Cherry Studio
+    note: >-
+      Example Agent Skills host: import or install the skill folder, or point
+      at the SKILL.md path inside plugins/<plugin_id>/ from jackyzhang69/plugins.
+      Prefer the full plugin tree so bin/ is available for doctor --repair-install;
+      otherwise the canonical CLI path must already exist.
+
+  - id: agent-skills-generic
+    kind: agent_skills
+    public_recipe: true
+    required_in_package: false
+    title: Any Agent Skills–compatible agent
+    steps:
+      - >-
+        Clone or open https://github.com/jackyzhang69/plugins and attach
+        plugins/<plugin_id>/ (full tree: skills + bin + runtime-manifest).
+      - >-
+        Or load only skills/<plugin_id>/ after the matching CLI already exists at
+        ~/.jackyzhang.app/plugins/<plugin_id>/current.
+      - >-
+        From the package root, run bin/<platform>/<plugin_id> doctor --repair-install
+        once, then use the canonical CLI path for every later command.

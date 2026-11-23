@@ -3,11 +3,13 @@ resolver = "2"
 members = [
     "cli",
 ]
+# Vendored from the platform repo (vendor/jz-plugin-lifecycle/SOURCE_REV); never edit in place.
+exclude = ["vendor/jz-plugin-lifecycle"]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
-version = "0.5.27"
+version = "0.5.28"
 authors = ["Jacky Zhang <jackyzhang1969@gmail.com>"]
 repository = "https://github.com/jackyzhang69/easybooks"
 

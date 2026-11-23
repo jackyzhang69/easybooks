@@ -37,7 +37,7 @@ if not last_tag:
 last_ver = last_tag.removeprefix("plugin-v")
 changed = subprocess.check_output(
     ["git", "diff", "--name-only", f"{last_tag}..HEAD", "--",
-     "cli/", "plugin-metadata/", "Cargo.toml", "Cargo.lock", ".claude/skills/", ".agents/skills/"],
+     "cli/", "plugin-metadata/", "Cargo.toml", "Cargo.lock", ".claude/skills/"],
     text=True,
 ).strip()
 if not changed:

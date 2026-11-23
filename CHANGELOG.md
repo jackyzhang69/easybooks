@@ -1,3 +1,11 @@
+## 0.5.28
+
+- Install and update through the shared `jz-plugin-lifecycle` crate (vendored at 594903882559d4a19a57efe41977129b5bd55253): `doctor --repair-install` makes the running package the only installed copy under `~/.jackyzhang.app/plugins/easybooks/` and removes older versions in the host plugin cache that supplied it; login, config and user data are kept. No backup tree is left.
+- A passive update notice (`jz.plugin.update_notice.v1` on stderr, at most once a day, never blocks a command) replaces the opt-in `doctor --check-upgrade`, which is removed together with the `upgrade` block of the doctor output.
+- `commands --json` is `plugin-cli-commands-v2`: every public command and argument carries a plain-language description. `references/command-surface.md` is generated from the binary; the skill gains a full capability list and an `## Updates` router block, `whats-new.md` is rewritten for this version, and a cold-read receipt is added.
+- Release workflow: macOS signing and notarization are switched off (`SIGN_MACOS`), the release-lane preflight runs from the governed checkout (`/Users/jacky/.agents/platform-governance-src`, pulled first), and the publisher renders the README from a renderer and `hosts.yaml` copied beside it, so the marketplace README lists linux-x64.
+- The unshipped `.agents/skills/easybooks` mirror and `scripts/sync-skills.sh` are removed; `.claude/skills/easybooks` is the only skill source.
+
 ## 0.5.27
 
 - Product Signals events (`posting_completed`, `invoice_created`, `invoice_sent`, `invoice_marked`, `client_created`, `rule_created`, `doctor_completed`) carry bounded reserved diagnostics per `product-signals-v1`: client metadata, timed steps and count-only context on every event, plus the redacted error message/report on failures. Redaction, caps and gating match the shared platform contract fixtures.

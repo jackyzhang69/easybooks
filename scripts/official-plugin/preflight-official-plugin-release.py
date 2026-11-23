@@ -21,15 +21,8 @@ import sys
 REQUIRED: dict[str, tuple[str, tuple[str, ...]]] = {
     "easybooks": (
         "jackyzhang69/easybooks",
-        (
-            "PLUGINS_REPO_DEPLOY_KEY",
-            "APPLE_ID",
-            "APPLE_APP_SPECIFIC_PASSWORD",
-            "APPLE_TEAM_ID",
-            "APPLE_SIGNING_IDENTITY",
-            "CSC_LINK",
-            "CSC_KEY_PASSWORD",
-        ),
+        # Desktop signing is waived (plugin-policy.md): no Apple secrets required.
+        ("PLUGINS_REPO_DEPLOY_KEY",),
     ),
     "anychat": (
         "jackyzhang69/anychat",

@@ -1,0 +1,19 @@
+[package]
+name = "jz-plugin-lifecycle"
+version = "0.1.0"
+edition = "2021"
+description = "Shared install, update-notice and command-surface code for official Jacky plugins. Contains no auth code."
+publish = false
+
+[dependencies]
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+clap = { version = "4", default-features = false, features = ["std"], optional = true }
+
+[features]
+default = ["clap"]
+
+[dev-dependencies]
+tempfile = "3"
+mockito = "1"
+clap = { version = "4", features = ["derive"] }

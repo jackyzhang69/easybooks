@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """EasyBooks skill contract: vault surface assert + --json placement.
 
-The vault script (scripts/assert-skill-surface.py, identical to
-platform-vault/scripts/assert-skill-surface.py) is the CLI↔skill contract.
+The platform gate (scripts/official-plugin/assert-skill-surface.py, byte-identical
+to platform governance/scripts/assert-skill-surface.py) is the CLI↔skill contract.
 This wrapper adds the EasyBooks-only rule that `--json` precedes `doctor` /
 `whoami` / `login` (those subcommands declare `--json` as a payload flag).
 """
@@ -17,9 +17,9 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOTS = (ROOT / ".claude/skills", ROOT / ".agents/skills")
+SKILL_ROOTS = (ROOT / ".claude/skills",)
 SUBCOMMANDS_WITH_TOP_LEVEL_JSON = ("doctor", "whoami", "login")
-SURFACE = ROOT / "scripts/assert-skill-surface.py"
+SURFACE = ROOT / "scripts/official-plugin/assert-skill-surface.py"
 
 
 def _bin_path() -> Path | None:
@@ -95,7 +95,7 @@ def json_placement() -> list[str]:
 
     required_examples = {
         ROOT / ".claude/skills/easybooks/references/connect.md": (
-            '"$EASYBOOKS_BIN" --json doctor --no-fetch --check-upgrade',
+            '"$EASYBOOKS_BIN" --json doctor --no-fetch',
         ),
         ROOT / ".claude/skills/easybooks/SKILL.md": (
             "easybooks --json doctor",
